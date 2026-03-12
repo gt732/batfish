@@ -1,6 +1,9 @@
 package org.batfish.vendor.mikrotik.representation;
 
+import static com.google.common.base.MoreObjects.firstNonNull;
+
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -10,6 +13,8 @@ import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
+import org.batfish.datamodel.LineAction;
+import org.batfish.datamodel.Vrf;
 import org.batfish.vendor.VendorConfiguration;
 
 /** Vendor-specific representation of a MikroTik RouterOS configuration. */
@@ -50,7 +55,21 @@ public class MikrotikConfiguration extends VendorConfiguration {
 
   @Override
   public @Nonnull List<Configuration> toVendorIndependentConfigurations() {
-    // Stub: real conversion implemented in later stories.
-    return ImmutableList.of();
+    return ImmutableList.of(toVendorIndependentConfiguration());
+  }
+
+  private @Nonnull Configuration toVendorIndependentConfiguration() {
+    String hostname =
+        firstNonNull(_hostname, firstNonNull(getFilename(), "~batfish_mikrotik_no_hostname~"));
+    Configuration c = new Configuration(hostname, ConfigurationFormat.MIKROTIK);
+    c.setDefaultInboundAction(LineAction.PERMIT);
+    c.setDefaultCrossZoneAction(LineAction.PERMIT);
+
+    Vrf vrf = new Vrf(Configuration.DEFAULT_VRF_NAME);
+    c.setVrfs(ImmutableMap.of(Configuration.DEFAULT_VRF_NAME, vrf));
+
+    _interfaces.values().forEach(iface -> c.getAllInterfaces().put(iface.getName(), Conversions.toViInterface(iface)));
+
+    return c;
   }
 }
