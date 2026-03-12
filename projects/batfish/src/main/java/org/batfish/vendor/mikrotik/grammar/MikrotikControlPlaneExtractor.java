@@ -208,6 +208,28 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
         STATIC_ROUTE, network.toString(), STATIC_ROUTE_SELF_REFERENCE, ctx.getStart().getLine());
   }
 
+  @Override
+  public void enterSystem_command(MikrotikParser.System_commandContext ctx) {
+    if (ctx.system_subpath() == null
+        || ctx.system_subpath().IDENTITY() == null
+        || ctx.command_tail() == null
+        || ctx.command_tail().line_command() == null) {
+      return;
+    }
+    MikrotikParser.Line_commandContext lineCommand = ctx.command_tail().line_command();
+    if (lineCommand.command_verb() == null
+        || !lineCommand.command_verb().getText().equalsIgnoreCase("set")) {
+      return;
+    }
+    lineCommand.command_argument().stream()
+        .map(MikrotikParser.Command_argumentContext::key_value_parameter)
+        .filter(param -> param != null && param.word() != null && param.parameter_value() != null)
+        .filter(param -> param.word().getText().equalsIgnoreCase("name"))
+        .map(param -> extractParameterValue(param.parameter_value()))
+        .findFirst()
+        .ifPresent(_configuration::setHostname);
+  }
+
   private @Nonnull String getFullText(ParserRuleContext ctx) {
     int start = ctx.getStart().getStartIndex();
     int end = ctx.getStop().getStopIndex();

@@ -1,5 +1,6 @@
 package org.batfish.vendor.mikrotik.grammar;
 
+import static com.google.common.collect.Iterables.getOnlyElement;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.batfish.common.util.Resources.readResource;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -20,6 +21,7 @@ import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.Warnings;
 import org.batfish.config.Settings;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
+import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Prefix;
 import org.batfish.grammar.silent_syntax.SilentSyntaxCollection;
@@ -137,6 +139,30 @@ public class MikrotikGrammarTest {
         interfaceWithAddress.getAddresses(),
         contains(ConcreteInterfaceAddress.parse("10.0.0.2/30")));
     assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testMikrotikSystemIdentityExtraction() {
+    ExtractionResult result =
+        parseAndExtractFromString("/system identity set name=mtik-inline\n");
+
+    assertThat(result._configuration.getHostname(), equalTo("mtik-inline"));
+  }
+
+  @Test
+  public void testMikrotikSystemIdentityExtractionFromFixture() {
+    ExtractionResult result = parseAndExtract("mikrotik_interfaces_and_routes.export");
+
+    assertThat(result._configuration.getHostname(), equalTo("mtik-edge-01"));
+  }
+
+  @Test
+  public void testMikrotikSystemIdentityHostnameUsedForViConversion() {
+    ExtractionResult result = parseAndExtract("mikrotik_interfaces_and_routes.export");
+    result._configuration.setFilename("configs/fallback-hostname");
+
+    Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
+    assertThat(viConfig.getHostname(), equalTo("mtik-edge-01"));
   }
 
   @Test

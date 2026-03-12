@@ -55,6 +55,19 @@ public final class MikrotikConfigurationTest {
   }
 
   @Test
+  public void testToVendorIndependentConfigurationsHostnameOverridesFilenameFallback() {
+    MikrotikConfiguration vc = new MikrotikConfiguration();
+    vc.setFilename("configs/router1.rsc");
+    vc.setHostname("config-hostname");
+
+    List<Configuration> configs = vc.toVendorIndependentConfigurations();
+
+    assertThat(configs, hasSize(1));
+    Configuration c = getOnlyElement(configs);
+    assertThat(c.getHostname(), equalTo("config-hostname"));
+  }
+
+  @Test
   public void testToVendorIndependentConfigurationsWithStaticRoute() {
     MikrotikConfiguration vc = new MikrotikConfiguration();
     vc.setHostname("test-mikrotik");
