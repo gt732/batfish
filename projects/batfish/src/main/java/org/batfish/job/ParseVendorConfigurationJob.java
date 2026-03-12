@@ -77,6 +77,8 @@ import org.batfish.vendor.check_point_gateway.grammar.CheckPointGatewayCombinedP
 import org.batfish.vendor.check_point_gateway.grammar.CheckPointGatewayControlPlaneExtractor;
 import org.batfish.vendor.cisco_nxos.grammar.CiscoNxosCombinedParser;
 import org.batfish.vendor.cisco_nxos.grammar.NxosControlPlaneExtractor;
+import org.batfish.vendor.mikrotik.grammar.MikrotikCombinedParser;
+import org.batfish.vendor.mikrotik.grammar.MikrotikControlPlaneExtractor;
 import org.batfish.vendor.sonic.grammar.SonicControlPlaneExtractor;
 import org.batfish.vendor.sonic.grammar.SonicControlPlaneExtractor.SonicFileType;
 
@@ -219,6 +221,24 @@ public class ParseVendorConfigurationJob extends BatfishJob<ParseVendorConfigura
                   _fileResults.get(filename).getWarnings(),
                   _fileResults.get(filename).getSilentSyntax());
           parseFile(filename, aristaParser, extractor);
+          vc = extractor.getVendorConfiguration();
+          vc.setFilename(filename);
+          break;
+        }
+
+      case MIKROTIK:
+        {
+          Entry<String, String> fileEntry = Iterables.getOnlyElement(_fileTexts.entrySet());
+          String filename = fileEntry.getKey();
+          String fileText = fileEntry.getValue();
+          MikrotikCombinedParser mikrotikParser = new MikrotikCombinedParser(fileText, _settings);
+          ControlPlaneExtractor extractor =
+              new MikrotikControlPlaneExtractor(
+                  fileText,
+                  mikrotikParser,
+                  _fileResults.get(filename).getWarnings(),
+                  _fileResults.get(filename).getSilentSyntax());
+          parseFile(filename, mikrotikParser, extractor);
           vc = extractor.getVendorConfiguration();
           vc.setFilename(filename);
           break;

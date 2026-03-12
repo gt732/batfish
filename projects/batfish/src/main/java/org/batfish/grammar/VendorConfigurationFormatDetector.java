@@ -57,6 +57,11 @@ public final class VendorConfigurationFormatDetector {
   private static final Pattern RANCID_BASE_PATTERN =
       Pattern.compile("(?m)^[!#]RANCID-CONTENT-TYPE: ([a-zA-Z0-9_-]+)");
 
+  // checkMikrotik patterns
+  // RouterOS export files begin with "# <date/time> by RouterOS <version>"
+  private static final Pattern MIKROTIK_ROUTEROS_HEADER_PATTERN =
+      Pattern.compile("(?m)^# [a-z]+/\\d+/\\d+ \\d+:\\d+:\\d+ by RouterOS ");
+
   // checkCisco patterns
   private static final Pattern ASA_VERSION_LINE_PATTERN = Pattern.compile("(?m)(^ASA Version.*$)");
   private static final Pattern CISCO_LIKE_PATTERN =
@@ -284,6 +289,13 @@ public final class VendorConfigurationFormatDetector {
     return null;
   }
 
+  private @Nullable ConfigurationFormat checkMikrotik() {
+    if (fileTextMatches(MIKROTIK_ROUTEROS_HEADER_PATTERN)) {
+      return ConfigurationFormat.MIKROTIK;
+    }
+    return null;
+  }
+
   private @Nullable ConfigurationFormat checkMetamako() {
     if (_fileText.contains("application metamux")
         || _fileText.contains("application metawatch")
@@ -501,6 +513,7 @@ public final class VendorConfigurationFormatDetector {
     format = (format == null) ? checkCiscoXr() : format;
     format = (format == null) ? checkFlatVyos() : format;
     format = (format == null) ? checkMetamako() : format;
+    format = (format == null) ? checkMikrotik() : format;
     format = (format == null) ? checkMrv() : format;
     format = (format == null) ? checkMrvCommands() : format;
     format = (format == null) ? checkPaloAlto(false) : format;

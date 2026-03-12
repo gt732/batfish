@@ -1,0 +1,75 @@
+# mar/11/2026 12:00:00 by RouterOS 6.49.6
+# software id = TEST-1234
+#
+# model = CCR1009-7G-1C-1S+
+# serial number = TEST0000001
+
+/system identity
+set name=mtik-edge-01
+
+/system clock
+set time-zone-name=America/New_York
+
+/interface bridge
+add name=bridge-lan protocol-mode=rstp comment="LAN bridge"
+
+/interface ethernet
+set [ find default-name=ether1 ] name=uplink-core comment="to cisco-core"
+set [ find default-name=ether2 ] name=customer-a
+set [ find default-name=ether3 ] name=customer-b disabled=yes
+set [ find default-name=ether4 ] name=mgmt
+set [ find default-name=ether5 ] name=spare comment="unused test port"
+
+/interface bridge port
+add bridge=bridge-lan interface=customer-a
+add bridge=bridge-lan interface=customer-b
+add bridge=bridge-lan interface=mgmt
+
+/ip address
+add address=10.0.0.2/30 interface=uplink-core network=10.0.0.0 comment="L3 to Cisco core"
+add address=192.168.10.1/24 interface=bridge-lan network=192.168.10.0 comment="subscriber gateway"
+add address=172.16.0.2/24 interface=mgmt network=172.16.0.0
+add address=192.168.30.1/24 interface=spare network=192.168.30.0 disabled=yes comment="disabled address"
+
+/ip route
+add dst-address=0.0.0.0/0 gateway=10.0.0.1 distance=1 comment="default to core"
+add dst-address=198.51.100.0/24 gateway=10.0.0.1 distance=10 comment="test static route"
+add dst-address=203.0.113.0/24 gateway=172.16.0.1 distance=5 comment="mgmt-side route"
+add dst-address=192.0.2.0/24 gateway=192.168.30.254 distance=20 comment="disabled interface subnet route"
+add dst-address=100.64.0.0/16 gateway=10.255.255.1 distance=30 comment="route with unreachable next-hop"
+
+/ip dns
+set allow-remote-requests=yes servers=1.1.1.1,8.8.8.8
+
+/ip firewall filter
+add chain=input action=accept protocol=icmp comment="unsupported for MVP but should parse safely"
+add chain=input action=drop in-interface=uplink-core comment="ignore unsupported block safely"
+
+/routing bgp instance
+set default as=64512 router-id=10.0.0.2
+
+/routing bgp peer
+add name=upstream1 remote-address=10.0.0.1 remote-as=64500 comment="unsupported for MVP"
+
+/snmp community
+set [ find default=yes ] name=public addresses=172.16.0.0/24
+
+/tool graphing interface
+add interface=uplink-core
+add interface=bridge-lan
+
+/system logging
+add topics=info action=memory
+add topics=warning action=memory
+
+# deliberately unsupported/custom-looking section for recovery testing
+/fancy unsupported-feature
+add foo=bar baz=qux comment="this should produce warning not exception"
+
+# another intentionally noisy command path
+/routing weird feature
+set alpha=1 beta=2 gamma="hello world"
+
+# route-like data that should NOT be treated as /ip route
+/ip firewall address-list
+add list=bogons address=0.0.0.0/8 comment="noise for parser"

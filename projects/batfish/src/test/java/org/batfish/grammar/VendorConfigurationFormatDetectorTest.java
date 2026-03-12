@@ -13,6 +13,7 @@ import static org.batfish.datamodel.ConfigurationFormat.FLAT_JUNIPER;
 import static org.batfish.datamodel.ConfigurationFormat.IBM_BNT;
 import static org.batfish.datamodel.ConfigurationFormat.JUNIPER;
 import static org.batfish.datamodel.ConfigurationFormat.JUNIPER_SWITCH;
+import static org.batfish.datamodel.ConfigurationFormat.MIKROTIK;
 import static org.batfish.datamodel.ConfigurationFormat.PALO_ALTO;
 import static org.batfish.datamodel.ConfigurationFormat.PALO_ALTO_NESTED;
 import static org.batfish.datamodel.ConfigurationFormat.RUCKUS_ICX;
@@ -333,6 +334,34 @@ public class VendorConfigurationFormatDetectorTest {
     for (String fileText : ImmutableList.of(rancidZebra, rancidFrr)) {
       assertThat(identifyConfigurationFormat(fileText), equalTo(UNSUPPORTED));
     }
+  }
+
+  @Test
+  public void testMikrotik() {
+    // RouterOS export files begin with a "# <date> by RouterOS <version>" header comment
+    String routerOsExportHeader =
+        "# mar/11/2026 12:00:00 by RouterOS 6.49.6\n"
+            + "# software id = TEST-1234\n"
+            + "/interface ethernet\n"
+            + "set [ find default-name=ether1 ] name=uplink-core\n";
+    assertThat(identifyConfigurationFormat(routerOsExportHeader), equalTo(MIKROTIK));
+
+    // Batfish-tagged override should also work
+    String batfishTagged = "# BATFISH_FORMAT: mikrotik\n";
+    assertThat(identifyConfigurationFormat(batfishTagged), equalTo(MIKROTIK));
+  }
+
+  @Test
+  public void testMikrotikNegative() {
+    // Slash-heavy configs that are NOT RouterOS should not be detected as Mikrotik
+    String juniperLike =
+        "set interfaces ge-0/0/0 description uplink\n"
+            + "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.1\n";
+    assertThat(identifyConfigurationFormat(juniperLike), not(equalTo(MIKROTIK)));
+
+    // A config with many slashes in other vendor syntax (Cisco IOS path-style) should not match
+    String ciscoLike = "interface GigabitEthernet0/0/0\n ip address 10.0.0.1 255.255.255.0\n";
+    assertThat(identifyConfigurationFormat(ciscoLike), not(equalTo(MIKROTIK)));
   }
 
   @Test
