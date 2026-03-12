@@ -1,0 +1,15 @@
+# mar/12/2026 16:20:36 by RouterOS 6.49.17
+# software id = TEST-9999
+
+/system identity
+set name=mtik-recovery-test
+
+/fancy unsupported-feature
+add foo=bar baz=qux comment="unsupported path should warn"
+
+/routing weird feature
+set alpha=1 beta=2 gamma="hello world"
+
+/ip route
+add dst-address=198.51.100.0/24 gateway=10.0.0.1
+add dst-address=203.0.113.0/24 gateway=

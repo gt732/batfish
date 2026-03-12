@@ -18,9 +18,11 @@ junit_tests(
     ],
     deps = [
         "//projects/batfish",
+        "//projects/batfish/src/main/antlr4/org/batfish/vendor/mikrotik/grammar",
         "//projects/batfish/src/main/java/org/batfish/vendor/mikrotik/grammar",
         "//projects/batfish/src/main/java/org/batfish/vendor/mikrotik/representation",
         "//projects/common",
+        "@maven//:org_antlr_antlr4_runtime",
         "@maven//:com_google_guava_guava",
         "@maven//:junit_junit",
         "@maven//:org_hamcrest_hamcrest",

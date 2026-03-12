@@ -7,6 +7,7 @@ java_library(
     name = "mikrotik_base",
     srcs = [
         "MikrotikBaseLexer.java",
+        "MikrotikBaseParser.java",
     ],
     deps = [
         "//projects/common:parser_common",
@@ -21,6 +22,7 @@ java_library(
         ["*.java"],
         exclude = [
             "MikrotikBaseLexer.java",
+            "MikrotikBaseParser.java",
         ],
     ),
     deps = [
