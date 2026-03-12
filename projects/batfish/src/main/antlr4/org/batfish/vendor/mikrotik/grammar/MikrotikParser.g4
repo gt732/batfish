@@ -5,7 +5,7 @@ options {
    tokenVocab = MikrotikLexer;
 }
 
-import Mikrotik_common;
+import Mikrotik_common, Mikrotik_interface;
 
 mikrotik_configuration
 :
@@ -30,30 +30,37 @@ statement
 
 interface_command
 :
-  interface_path command_tail?
+  SLASH INTERFACE interface_type_command
 ;
 
-interface_path
+interface_type_command
 :
-  SLASH INTERFACE interface_subpath
-;
-
-interface_subpath
-:
-  BRIDGE (PORT)?
-  | ETHERNET
-  | WIRELESS SECURITY_PROFILES
+  interface_bridge_add
+  | interface_bridge_port_add
+  | interface_ethernet_set
+  | WIRELESS SECURITY_PROFILES command_tail?
+  | command_tail?
 ;
 
 ip_command
 :
-  SLASH IP ip_subpath command_tail?
+  SLASH IP (ip_address_command | ip_other_command)
+;
+
+ip_address_command
+:
+  ip_address_add
+  | ADDRESS command_tail?
+;
+
+ip_other_command
+:
+  ip_subpath command_tail?
 ;
 
 ip_subpath
 :
-  ADDRESS
-  | ROUTE
+  ROUTE
   | DNS
   | FIREWALL FILTER
   | FIREWALL ADDRESS_LIST

@@ -1,0 +1,6 @@
+# mar/12/2026 16:20:36 by RouterOS 6.49.17
+/interface bridge add comment="LAN bridge" name=bridge-lan
+/interface ethernet set [ find default-name=ether2 ] disable-running-check=no name=customer-a
+/interface ethernet set [ find default-name=ether5 ] disable-running-check=no disabled=yes name=spare
+/interface bridge port add bridge=bridge-lan interface=customer-a
+/ip address add address=10.0.0.2/30 comment="L3 to Cisco core" interface=uplink-core network=10.0.0.0

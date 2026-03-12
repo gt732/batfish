@@ -33,8 +33,15 @@ word
   | TOOL
   | GRAPHING
   | FIND
+  | DEFAULT_NAME
   | ADD
   | SET
+  | NAME
+  | DISABLED
+  | COMMENT
+  | MTU
+  | DISABLE_RUNNING_CHECK
+  | NETWORK
   | YES
   | NO
   | IDENTIFIER
@@ -80,4 +87,3 @@ key_value_parameter
 :
   word EQUALS parameter_value
 ;
-

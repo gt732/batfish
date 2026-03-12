@@ -3,6 +3,7 @@ package org.batfish.vendor.mikrotik.grammar;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.batfish.common.util.Resources.readResource;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.notNullValue;
 
@@ -49,5 +50,19 @@ public class MikrotikGrammarTest {
 
     assertThat(parser, notNullValue());
     assertThat(tree, notNullValue());
+  }
+
+  @Test
+  public void testMikrotikInterfaceBasic() {
+    String src = readResource(TESTCONFIGS_PREFIX + "mikrotik_interface_basic", UTF_8);
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    assertThat(tree, notNullValue());
+    assertThat(tree.toStringTree(parser.getParser()), containsString("interface_bridge_add"));
+    assertThat(tree.toStringTree(parser.getParser()), containsString("ip_address_add"));
   }
 }

@@ -179,6 +179,11 @@ FIND
   'find'
 ;
 
+DEFAULT_NAME
+:
+  'default-name'
+;
+
 ADD
 :
   'add'
@@ -187,6 +192,36 @@ ADD
 SET
 :
   'set'
+;
+
+NAME
+:
+  'name'
+;
+
+DISABLED
+:
+  'disabled'
+;
+
+COMMENT
+:
+  'comment'
+;
+
+MTU
+:
+  'mtu'
+;
+
+DISABLE_RUNNING_CHECK
+:
+  'disable-running-check'
+;
+
+NETWORK
+:
+  'network'
 ;
 
 YES
