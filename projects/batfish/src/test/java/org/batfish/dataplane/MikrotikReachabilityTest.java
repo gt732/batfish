@@ -2,7 +2,7 @@ package org.batfish.dataplane;
 
 import static org.batfish.datamodel.matchers.HopMatchers.hasNodeName;
 import static org.batfish.datamodel.matchers.TraceMatchers.hasDisposition;
-import static org.batfish.datamodel.matchers.TraceMatchers.hasLastHop;
+import static org.batfish.datamodel.matchers.TraceMatchers.hasNthHop;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.allOf;
 import static org.hamcrest.Matchers.anyOf;
@@ -67,9 +67,8 @@ public final class MikrotikReachabilityTest {
                 hasDisposition(
                     anyOf(
                         equalTo(FlowDisposition.ACCEPTED),
-                        equalTo(FlowDisposition.DELIVERED_TO_SUBNET),
-                        equalTo(FlowDisposition.INSUFFICIENT_INFO))),
-                hasLastHop(hasNodeName("cisco-core")))));
+                        equalTo(FlowDisposition.DELIVERED_TO_SUBNET))),
+                hasNthHop(1, hasNodeName("edge-mikrotik")))));
   }
 
   @Test
@@ -98,9 +97,37 @@ public final class MikrotikReachabilityTest {
                 hasDisposition(
                     anyOf(
                         equalTo(FlowDisposition.ACCEPTED),
-                        equalTo(FlowDisposition.DELIVERED_TO_SUBNET),
-                        equalTo(FlowDisposition.INSUFFICIENT_INFO))),
-                hasLastHop(hasNodeName("cisco-core")))));
+                        equalTo(FlowDisposition.DELIVERED_TO_SUBNET))),
+                hasNthHop(1, hasNodeName("edge-mikrotik")))));
+  }
+
+  @Test
+  public void testBridgeRenamedReachability() throws IOException {
+    Batfish batfish =
+        getBatfish("mikrotik-bridge-renamed", ImmutableSet.of("cisco-core", "edge-mikrotik"));
+    NetworkSnapshot snapshot = batfish.getSnapshot();
+    batfish.computeDataPlane(snapshot);
+
+    Flow flow =
+        Flow.builder()
+            .setIngressNode("cisco-core")
+            .setIngressInterface("GigabitEthernet0/0")
+            .setDstIp(Ip.parse("192.168.12.100"))
+            .setSrcIp(Ip.parse("10.12.0.1"))
+            .build();
+
+    SortedMap<Flow, List<Trace>> traces =
+        batfish.getTracerouteEngine(snapshot).computeTraces(ImmutableSet.of(flow), false);
+
+    assertThat(
+        traces.get(flow),
+        contains(
+            allOf(
+                hasDisposition(
+                    anyOf(
+                        equalTo(FlowDisposition.ACCEPTED),
+                        equalTo(FlowDisposition.DELIVERED_TO_SUBNET))),
+                hasNthHop(1, hasNodeName("edge-mikrotik")))));
   }
 
   @Test
@@ -131,9 +158,8 @@ public final class MikrotikReachabilityTest {
                 hasDisposition(
                     anyOf(
                         equalTo(FlowDisposition.ACCEPTED),
-                        equalTo(FlowDisposition.DELIVERED_TO_SUBNET),
-                        equalTo(FlowDisposition.INSUFFICIENT_INFO))),
-                hasLastHop(hasNodeName("cisco-src")))));
+                        equalTo(FlowDisposition.DELIVERED_TO_SUBNET))),
+                hasNthHop(1, hasNodeName("mikrotik-transit")))));
   }
 
   @Test
@@ -154,7 +180,8 @@ public final class MikrotikReachabilityTest {
     String testrigPrefix = TESTRIGS_PREFIX + testrigName;
     ImmutableSet<String> hostFiles =
         switch (testrigName) {
-          case "mikrotik-mixed-vendor", "mikrotik-core-to-edge" -> ImmutableSet.of("edge-host.json");
+          case "mikrotik-mixed-vendor", "mikrotik-core-to-edge", "mikrotik-bridge-renamed" ->
+              ImmutableSet.of("edge-host.json");
           case "mikrotik-transit" -> ImmutableSet.of("dst-host.json");
           default -> ImmutableSet.of();
         };

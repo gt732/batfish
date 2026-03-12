@@ -13,6 +13,7 @@ import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.ConfigurationFormat;
+import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.Vrf;
 import org.batfish.vendor.VendorConfiguration;
@@ -68,7 +69,14 @@ public class MikrotikConfiguration extends VendorConfiguration {
     Vrf vrf = new Vrf(Configuration.DEFAULT_VRF_NAME);
     c.setVrfs(ImmutableMap.of(Configuration.DEFAULT_VRF_NAME, vrf));
 
-    _interfaces.values().forEach(iface -> c.getAllInterfaces().put(iface.getName(), Conversions.toViInterface(iface)));
+    _interfaces.values()
+        .forEach(
+            iface -> {
+              Interface viIface = Conversions.toViInterface(iface);
+              viIface.setOwner(c);
+              viIface.setVrf(vrf);
+              c.getAllInterfaces().put(viIface.getName(), viIface);
+            });
     for (MikrotikStaticRoute sr : _staticRoutes) {
       vrf.getStaticRoutes().add(Conversions.toViStaticRoute(sr));
     }

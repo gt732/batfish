@@ -1,0 +1,9 @@
+# mar/12/2026 16:20:36 by RouterOS 6.49.17
+/interface bridge add name=bridge-lan
+/interface ethernet set [ find default-name=ether1 ] disable-running-check=no name=uplink-core
+/interface ethernet set [ find default-name=ether2 ] disable-running-check=no name=customer-a
+/interface bridge port add bridge=bridge-lan interface=customer-a
+/ip address add address=10.12.0.2/30 interface=uplink-core network=10.12.0.0
+/ip address add address=192.168.12.1/24 interface=bridge-lan network=192.168.12.0
+/ip route add comment="default to core" distance=1 gateway=10.12.0.1
+/system identity set name=edge-mikrotik
