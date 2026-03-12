@@ -15,6 +15,9 @@ word
   | IP
   | ADDRESS
   | ROUTE
+  | DST_ADDRESS
+  | GATEWAY
+  | DISTANCE
   | DNS
   | FIREWALL
   | FILTER

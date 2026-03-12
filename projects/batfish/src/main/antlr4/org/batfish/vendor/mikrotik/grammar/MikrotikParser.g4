@@ -5,7 +5,7 @@ options {
    tokenVocab = MikrotikLexer;
 }
 
-import Mikrotik_common, Mikrotik_interface;
+import Mikrotik_common, Mikrotik_interface, Mikrotik_static;
 
 mikrotik_configuration
 :
@@ -44,13 +44,19 @@ interface_type_command
 
 ip_command
 :
-  SLASH IP (ip_address_command | ip_other_command)
+  SLASH IP (ip_address_command | ip_route_command | ip_other_command)
 ;
 
 ip_address_command
 :
   ip_address_add
   | ADDRESS command_tail?
+;
+
+ip_route_command
+:
+  ip_route_add
+  | ROUTE command_tail?
 ;
 
 ip_other_command
@@ -60,8 +66,7 @@ ip_other_command
 
 ip_subpath
 :
-  ROUTE
-  | DNS
+  DNS
   | FIREWALL FILTER
   | FIREWALL ADDRESS_LIST
   | DHCP_CLIENT

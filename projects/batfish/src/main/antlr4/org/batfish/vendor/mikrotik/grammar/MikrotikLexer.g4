@@ -209,6 +209,21 @@ COMMENT
   'comment'
 ;
 
+DST_ADDRESS
+:
+  'dst-address'
+;
+
+GATEWAY
+:
+  'gateway'
+;
+
+DISTANCE
+:
+  'distance'
+;
+
 MTU
 :
   'mtu'

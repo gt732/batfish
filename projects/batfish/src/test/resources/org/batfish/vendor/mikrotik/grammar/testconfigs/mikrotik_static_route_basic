@@ -1,0 +1,2 @@
+/ip route add comment="default to core" distance=1 gateway=10.0.0.1
+/ip route add comment="test static route" distance=10 dst-address=198.51.100.0/24 gateway=10.0.0.1

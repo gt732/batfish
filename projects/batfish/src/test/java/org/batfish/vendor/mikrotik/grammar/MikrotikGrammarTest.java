@@ -65,4 +65,17 @@ public class MikrotikGrammarTest {
     assertThat(tree.toStringTree(parser.getParser()), containsString("interface_bridge_add"));
     assertThat(tree.toStringTree(parser.getParser()), containsString("ip_address_add"));
   }
+
+  @Test
+  public void testMikrotikStaticRouteBasic() {
+    String src = readResource(TESTCONFIGS_PREFIX + "mikrotik_static_route_basic", UTF_8);
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    assertThat(tree, notNullValue());
+    assertThat(tree.toStringTree(parser.getParser()), containsString("ip_route_add"));
+  }
 }
