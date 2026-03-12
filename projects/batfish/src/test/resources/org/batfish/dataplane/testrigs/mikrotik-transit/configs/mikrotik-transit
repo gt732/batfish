@@ -1,0 +1,8 @@
+# mar/12/2026 16:20:36 by RouterOS 6.49.17
+/interface ethernet set [ find default-name=ether1 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether2 ] disable-running-check=no
+/ip address add address=10.1.0.2/30 interface=ether1 network=10.1.0.0
+/ip address add address=10.2.0.1/30 interface=ether2 network=10.2.0.0
+/ip route add comment="to src loopback" distance=1 dst-address=10.10.10.0/24 gateway=10.1.0.1
+/ip route add comment="to dst loopback" distance=1 dst-address=10.20.20.0/24 gateway=10.2.0.2
+/system identity set name=mikrotik-transit

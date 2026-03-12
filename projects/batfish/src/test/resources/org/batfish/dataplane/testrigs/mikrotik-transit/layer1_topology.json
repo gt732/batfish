@@ -1,0 +1,44 @@
+{
+  "edges": [
+    {
+      "node1": {
+        "hostname": "cisco-src",
+        "interfaceName": "GigabitEthernet0/0"
+      },
+      "node2": {
+        "hostname": "mikrotik-transit",
+        "interfaceName": "ether1"
+      }
+    },
+    {
+      "node1": {
+        "hostname": "mikrotik-transit",
+        "interfaceName": "ether1"
+      },
+      "node2": {
+        "hostname": "cisco-src",
+        "interfaceName": "GigabitEthernet0/0"
+      }
+    },
+    {
+      "node1": {
+        "hostname": "mikrotik-transit",
+        "interfaceName": "ether2"
+      },
+      "node2": {
+        "hostname": "cisco-dst",
+        "interfaceName": "GigabitEthernet0/0"
+      }
+    },
+    {
+      "node1": {
+        "hostname": "cisco-dst",
+        "interfaceName": "GigabitEthernet0/0"
+      },
+      "node2": {
+        "hostname": "mikrotik-transit",
+        "interfaceName": "ether2"
+      }
+    }
+  ]
+}

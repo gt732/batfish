@@ -1,0 +1,24 @@
+{
+  "edges": [
+    {
+      "node1": {
+        "hostname": "cisco-core",
+        "interfaceName": "GigabitEthernet0/0"
+      },
+      "node2": {
+        "hostname": "edge-mikrotik",
+        "interfaceName": "ether1"
+      }
+    },
+    {
+      "node1": {
+        "hostname": "edge-mikrotik",
+        "interfaceName": "ether1"
+      },
+      "node2": {
+        "hostname": "cisco-core",
+        "interfaceName": "GigabitEthernet0/0"
+      }
+    }
+  ]
+}

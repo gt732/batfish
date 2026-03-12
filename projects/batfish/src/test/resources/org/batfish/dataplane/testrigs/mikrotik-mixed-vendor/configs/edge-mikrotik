@@ -1,0 +1,7 @@
+# mar/12/2026 16:20:36 by RouterOS 6.49.17
+/interface ethernet set [ find default-name=ether1 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether2 ] disable-running-check=no
+/ip address add address=10.0.0.2/30 interface=ether1 network=10.0.0.0
+/ip address add address=192.168.10.1/24 interface=ether2 network=192.168.10.0
+/ip route add comment="default to core" distance=1 gateway=10.0.0.1
+/system identity set name=edge-mikrotik

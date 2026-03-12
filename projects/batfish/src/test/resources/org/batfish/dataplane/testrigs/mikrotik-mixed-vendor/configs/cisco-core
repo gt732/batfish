@@ -1,0 +1,13 @@
+!RANCID-CONTENT-TYPE: cisco
+!
+hostname cisco-core
+!
+interface GigabitEthernet0/0
+ ip address 10.0.0.1 255.255.255.252
+ no shutdown
+!
+interface Loopback0
+ ip address 1.1.1.1 255.255.255.255
+!
+ip route 192.168.10.0 255.255.255.0 10.0.0.2
+!
