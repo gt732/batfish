@@ -1,7 +1,9 @@
 package org.batfish.vendor.mikrotik.representation;
 
 import com.google.common.collect.ImmutableList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
@@ -14,6 +16,11 @@ import org.batfish.vendor.VendorConfiguration;
 public class MikrotikConfiguration extends VendorConfiguration {
 
   private @Nullable String _hostname;
+  private final @Nonnull Map<String, MikrotikInterface> _interfaces;
+
+  public MikrotikConfiguration() {
+    _interfaces = new HashMap<>();
+  }
 
   @Override
   public @Nullable String getHostname() {
@@ -28,6 +35,10 @@ public class MikrotikConfiguration extends VendorConfiguration {
   @Override
   public void setVendor(ConfigurationFormat format) {
     // ignored; format is always MIKROTIK
+  }
+
+  public @Nonnull Map<String, MikrotikInterface> getInterfaces() {
+    return _interfaces;
   }
 
   @Override

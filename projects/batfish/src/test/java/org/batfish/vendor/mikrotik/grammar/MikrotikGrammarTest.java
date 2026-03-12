@@ -3,8 +3,12 @@ package org.batfish.vendor.mikrotik.grammar;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.batfish.common.util.Resources.readResource;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItem;
+import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 
 import java.util.List;
@@ -12,8 +16,16 @@ import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
 import org.batfish.common.BatfishLogger;
+import org.batfish.common.NetworkSnapshot;
+import org.batfish.common.Warnings;
 import org.batfish.config.Settings;
+import org.batfish.datamodel.ConcreteInterfaceAddress;
+import org.batfish.grammar.silent_syntax.SilentSyntaxCollection;
+import org.batfish.identifiers.NetworkId;
+import org.batfish.identifiers.SnapshotId;
 import org.batfish.main.Batfish;
+import org.batfish.vendor.mikrotik.representation.MikrotikConfiguration;
+import org.batfish.vendor.mikrotik.representation.MikrotikInterface;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -77,5 +89,80 @@ public class MikrotikGrammarTest {
 
     assertThat(tree, notNullValue());
     assertThat(tree.toStringTree(parser.getParser()), containsString("ip_route_add"));
+  }
+
+  @Test
+  public void testMikrotikInterfaceExtraction() {
+    ExtractionResult result = parseAndExtract("mikrotik_interface_basic");
+
+    MikrotikConfiguration vc = result._configuration;
+    assertThat(vc.getInterfaces().keySet(), containsInAnyOrder("bridge-lan", "customer-a", "spare"));
+
+    MikrotikInterface bridgeLan = vc.getInterfaces().get("bridge-lan");
+    assertThat(bridgeLan, notNullValue());
+    assertThat(bridgeLan.getType(), equalTo("bridge"));
+    assertThat(bridgeLan.isDisabled(), equalTo(false));
+
+    MikrotikInterface customerA = vc.getInterfaces().get("customer-a");
+    assertThat(customerA, notNullValue());
+    assertThat(customerA.getType(), equalTo("ethernet"));
+
+    MikrotikInterface spare = vc.getInterfaces().get("spare");
+    assertThat(spare, notNullValue());
+    assertThat(spare.getType(), equalTo("ethernet"));
+    assertThat(spare.isDisabled(), equalTo(true));
+
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("references undefined interface uplink-core"));
+  }
+
+  @Test
+  public void testMikrotikIpAddressExtraction() {
+    String src =
+        "# mar/12/2026 16:20:36 by RouterOS 6.49.17\n"
+            + "/interface ethernet set [ find default-name=ether1 ] name=uplink-core\n"
+            + "/ip address add address=10.0.0.2/30 interface=uplink-core network=10.0.0.0\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface interfaceWithAddress =
+        result._configuration.getInterfaces().get("uplink-core");
+    assertThat(interfaceWithAddress, notNullValue());
+    assertThat(interfaceWithAddress.getAddresses(), hasSize(1));
+    assertThat(
+        interfaceWithAddress.getAddresses(),
+        contains(ConcreteInterfaceAddress.parse("10.0.0.2/30")));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  private static ExtractionResult parseAndExtract(String fixtureName) {
+    String src = readResource(TESTCONFIGS_PREFIX + fixtureName, UTF_8);
+    return parseAndExtractFromString(src);
+  }
+
+  private static ExtractionResult parseAndExtractFromString(String src) {
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    Warnings warnings = new Warnings();
+    MikrotikControlPlaneExtractor extractor =
+        new MikrotikControlPlaneExtractor(src, parser, warnings, new SilentSyntaxCollection());
+    extractor.processParseTree(
+        new NetworkSnapshot(new NetworkId("test-network"), new SnapshotId("test-snapshot")), tree);
+
+    return new ExtractionResult((MikrotikConfiguration) extractor.getVendorConfiguration(), warnings);
+  }
+
+  private static final class ExtractionResult {
+    private final MikrotikConfiguration _configuration;
+    private final Warnings _warnings;
+
+    private ExtractionResult(MikrotikConfiguration configuration, Warnings warnings) {
+      _configuration = configuration;
+      _warnings = warnings;
+    }
   }
 }
