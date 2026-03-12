@@ -1,6 +1,7 @@
 package org.batfish.vendor.mikrotik.representation;
 
 import com.google.common.collect.ImmutableList;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,9 +18,11 @@ public class MikrotikConfiguration extends VendorConfiguration {
 
   private @Nullable String _hostname;
   private final @Nonnull Map<String, MikrotikInterface> _interfaces;
+  private final @Nonnull List<MikrotikStaticRoute> _staticRoutes;
 
   public MikrotikConfiguration() {
     _interfaces = new HashMap<>();
+    _staticRoutes = new ArrayList<>();
   }
 
   @Override
@@ -39,6 +42,10 @@ public class MikrotikConfiguration extends VendorConfiguration {
 
   public @Nonnull Map<String, MikrotikInterface> getInterfaces() {
     return _interfaces;
+  }
+
+  public @Nonnull List<MikrotikStaticRoute> getStaticRoutes() {
+    return _staticRoutes;
   }
 
   @Override

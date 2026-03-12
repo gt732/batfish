@@ -4,7 +4,8 @@ import org.batfish.vendor.StructureType;
 
 public enum MikrotikStructureType implements StructureType {
   INTERFACE("interface"),
-  IP_ADDRESS("ip address");
+  IP_ADDRESS("ip address"),
+  STATIC_ROUTE("static route");
 
   private final String _description;
 

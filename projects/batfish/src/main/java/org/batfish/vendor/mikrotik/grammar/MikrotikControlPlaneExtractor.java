@@ -1,8 +1,10 @@
 package org.batfish.vendor.mikrotik.grammar;
 
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.INTERFACE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.STATIC_ROUTE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.INTERFACE_SELF_REFERENCE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.IP_ADDRESS_INTERFACE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.STATIC_ROUTE_SELF_REFERENCE;
 
 import java.util.Optional;
 import javax.annotation.Nonnull;
@@ -15,6 +17,8 @@ import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.Warnings;
 import org.batfish.common.Warnings.ParseWarning;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
+import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.Prefix;
 import org.batfish.grammar.BatfishParseTreeWalker;
 import org.batfish.grammar.ControlPlaneExtractor;
 import org.batfish.grammar.UnrecognizedLineToken;
@@ -22,6 +26,7 @@ import org.batfish.grammar.silent_syntax.SilentSyntaxCollection;
 import org.batfish.vendor.VendorConfiguration;
 import org.batfish.vendor.mikrotik.representation.MikrotikConfiguration;
 import org.batfish.vendor.mikrotik.representation.MikrotikInterface;
+import org.batfish.vendor.mikrotik.representation.MikrotikStaticRoute;
 
 /** Extracts a {@link MikrotikConfiguration} from a MikroTik RouterOS parse tree. */
 @ParametersAreNonnullByDefault
@@ -151,6 +156,56 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
       return;
     }
     iface.addAddress(ConcreteInterfaceAddress.parse(maybeAddress.get()));
+  }
+
+  @Override
+  public void enterIp_route_add(MikrotikParser.Ip_route_addContext ctx) {
+    String gatewayStr = null;
+    String dstStr = null;
+    int adminDistance = 1;
+
+    for (MikrotikParser.Ip_route_add_propContext prop : ctx.ip_route_add_prop()) {
+      if (prop.ip_route_prop_gateway() != null) {
+        gatewayStr = extractParameterValue(prop.ip_route_prop_gateway().parameter_value());
+      } else if (prop.ip_route_prop_dst_address() != null) {
+        dstStr = extractParameterValue(prop.ip_route_prop_dst_address().parameter_value());
+      } else if (prop.ip_route_prop_distance() != null) {
+        try {
+          adminDistance =
+              Integer.parseInt(extractParameterValue(prop.ip_route_prop_distance().parameter_value()));
+        } catch (NumberFormatException e) {
+          // Use default.
+        }
+      }
+    }
+
+    if (gatewayStr == null) {
+      _w.addWarning(ctx, getFullText(ctx), _parser, "Static route missing required gateway");
+      return;
+    }
+
+    Ip nextHopIp;
+    try {
+      nextHopIp = Ip.parse(gatewayStr);
+    } catch (IllegalArgumentException e) {
+      _w.addWarning(ctx, getFullText(ctx), _parser, String.format("Invalid gateway IP: %s", gatewayStr));
+      return;
+    }
+
+    Prefix network = Prefix.ZERO;
+    if (dstStr != null) {
+      try {
+        network = Prefix.parse(dstStr);
+      } catch (IllegalArgumentException e) {
+        _w.addWarning(
+            ctx, getFullText(ctx), _parser, String.format("Invalid dst-address prefix: %s", dstStr));
+        return;
+      }
+    }
+
+    _configuration.getStaticRoutes().add(new MikrotikStaticRoute(network, nextHopIp, adminDistance));
+    _configuration.referenceStructure(
+        STATIC_ROUTE, network.toString(), STATIC_ROUTE_SELF_REFERENCE, ctx.getStart().getLine());
   }
 
   private @Nonnull String getFullText(ParserRuleContext ctx) {

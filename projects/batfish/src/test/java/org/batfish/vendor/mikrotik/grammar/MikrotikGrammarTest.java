@@ -20,12 +20,15 @@ import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.Warnings;
 import org.batfish.config.Settings;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
+import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.Prefix;
 import org.batfish.grammar.silent_syntax.SilentSyntaxCollection;
 import org.batfish.identifiers.NetworkId;
 import org.batfish.identifiers.SnapshotId;
 import org.batfish.main.Batfish;
 import org.batfish.vendor.mikrotik.representation.MikrotikConfiguration;
 import org.batfish.vendor.mikrotik.representation.MikrotikInterface;
+import org.batfish.vendor.mikrotik.representation.MikrotikStaticRoute;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
@@ -134,6 +137,32 @@ public class MikrotikGrammarTest {
         interfaceWithAddress.getAddresses(),
         contains(ConcreteInterfaceAddress.parse("10.0.0.2/30")));
     assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testMikrotikStaticRouteExtraction() {
+    ExtractionResult result = parseAndExtract("mikrotik_static_route_basic");
+    List<MikrotikStaticRoute> routes = result._configuration.getStaticRoutes();
+
+    assertThat(routes, hasSize(2));
+    assertThat(routes.get(0).getNetwork(), equalTo(Prefix.ZERO));
+    assertThat(routes.get(0).getNextHopIp(), equalTo(Ip.parse("10.0.0.1")));
+    assertThat(routes.get(0).getAdminDistance(), equalTo(1));
+
+    assertThat(routes.get(1).getNetwork(), equalTo(Prefix.parse("198.51.100.0/24")));
+    assertThat(routes.get(1).getNextHopIp(), equalTo(Ip.parse("10.0.0.1")));
+    assertThat(routes.get(1).getAdminDistance(), equalTo(10));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testMikrotikStaticRouteInvalidGatewayWarning() {
+    ExtractionResult result = parseAndExtractFromString("/ip route add gateway=not-an-ip\n");
+    assertThat(result._configuration.getStaticRoutes(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("Invalid gateway IP: not-an-ip"));
   }
 
   private static ExtractionResult parseAndExtract(String fixtureName) {
