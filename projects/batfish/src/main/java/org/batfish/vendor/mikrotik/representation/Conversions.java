@@ -8,6 +8,8 @@ import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.InterfaceType;
+import org.batfish.datamodel.StaticRoute;
+import org.batfish.datamodel.route.nh.NextHopIp;
 
 /** Utilities for converting Mikrotik-specific representations to VI models. */
 @ParametersAreNonnullByDefault
@@ -50,5 +52,13 @@ public final class Conversions {
       }
     }
     return builder.build();
+  }
+
+  public static @Nonnull StaticRoute toViStaticRoute(MikrotikStaticRoute route) {
+    return StaticRoute.builder()
+        .setNetwork(route.getNetwork())
+        .setNextHop(NextHopIp.of(route.getNextHopIp()))
+        .setAdministrativeCost(route.getAdminDistance())
+        .build();
   }
 }

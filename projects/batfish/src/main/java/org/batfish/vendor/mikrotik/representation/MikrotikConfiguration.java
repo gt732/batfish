@@ -69,6 +69,9 @@ public class MikrotikConfiguration extends VendorConfiguration {
     c.setVrfs(ImmutableMap.of(Configuration.DEFAULT_VRF_NAME, vrf));
 
     _interfaces.values().forEach(iface -> c.getAllInterfaces().put(iface.getName(), Conversions.toViInterface(iface)));
+    for (MikrotikStaticRoute sr : _staticRoutes) {
+      vrf.getStaticRoutes().add(Conversions.toViStaticRoute(sr));
+    }
 
     return c;
   }

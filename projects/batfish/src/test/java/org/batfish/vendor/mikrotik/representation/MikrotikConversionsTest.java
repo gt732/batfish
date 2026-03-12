@@ -7,6 +7,10 @@ import static org.hamcrest.Matchers.nullValue;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.InterfaceType;
+import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.Prefix;
+import org.batfish.datamodel.StaticRoute;
+import org.batfish.datamodel.route.nh.NextHopIp;
 import org.junit.Test;
 
 public final class MikrotikConversionsTest {
@@ -72,5 +76,44 @@ public final class MikrotikConversionsTest {
     assertThat(viIface2.getAddress(), equalTo(viIface3.getAddress()));
     assertThat(viIface1.getAdminUp(), equalTo(viIface2.getAdminUp()));
     assertThat(viIface2.getAdminUp(), equalTo(viIface3.getAdminUp()));
+  }
+
+  @Test
+  public void testToViStaticRouteBasic() {
+    MikrotikStaticRoute route =
+        new MikrotikStaticRoute(Prefix.parse("10.0.0.0/8"), Ip.parse("192.168.1.1"), 1);
+
+    StaticRoute sr = Conversions.toViStaticRoute(route);
+
+    assertThat(sr.getNetwork(), equalTo(Prefix.parse("10.0.0.0/8")));
+    assertThat(sr.getNextHop(), equalTo(NextHopIp.of(Ip.parse("192.168.1.1"))));
+    assertThat(sr.getAdministrativeCost(), equalTo(1L));
+  }
+
+  @Test
+  public void testToViStaticRouteDefaultRoute() {
+    MikrotikStaticRoute route =
+        new MikrotikStaticRoute(Prefix.parse("0.0.0.0/0"), Ip.parse("10.0.0.1"), 1);
+
+    StaticRoute sr = Conversions.toViStaticRoute(route);
+
+    assertThat(sr.getNetwork(), equalTo(Prefix.ZERO));
+  }
+
+  @Test
+  public void testToViStaticRouteDeterministic() {
+    MikrotikStaticRoute route =
+        new MikrotikStaticRoute(Prefix.parse("10.0.0.0/8"), Ip.parse("192.168.1.1"), 1);
+
+    StaticRoute sr1 = Conversions.toViStaticRoute(route);
+    StaticRoute sr2 = Conversions.toViStaticRoute(route);
+    StaticRoute sr3 = Conversions.toViStaticRoute(route);
+
+    assertThat(sr1.getNetwork(), equalTo(sr2.getNetwork()));
+    assertThat(sr2.getNetwork(), equalTo(sr3.getNetwork()));
+    assertThat(sr1.getNextHop(), equalTo(sr2.getNextHop()));
+    assertThat(sr2.getNextHop(), equalTo(sr3.getNextHop()));
+    assertThat(sr1.getAdministrativeCost(), equalTo(sr2.getAdministrativeCost()));
+    assertThat(sr2.getAdministrativeCost(), equalTo(sr3.getAdministrativeCost()));
   }
 }
