@@ -10,18 +10,27 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasKey;
+import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.stream.Collectors;
 import org.batfish.common.NetworkSnapshot;
+import org.batfish.datamodel.AbstractRoute;
+import org.batfish.datamodel.Configuration;
+import org.batfish.datamodel.DataPlane;
 import org.batfish.datamodel.Flow;
 import org.batfish.datamodel.FlowDisposition;
+import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.Prefix;
+import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.datamodel.answers.ParseStatus;
 import org.batfish.datamodel.answers.ParseVendorConfigurationAnswerElement;
 import org.batfish.datamodel.flow.Trace;
@@ -174,6 +183,41 @@ public final class MikrotikReachabilityTest {
     assertMikrotikConfigsRecognized(mixedVendor, ImmutableSet.of("configs/edge-mikrotik"));
     assertMikrotikConfigsRecognized(coreToEdge, ImmutableSet.of("configs/edge-mikrotik"));
     assertMikrotikConfigsRecognized(transit, ImmutableSet.of("configs/mikrotik-transit"));
+  }
+
+  @Test
+  public void testVlanInterfacesRemainActiveAndConnectedRoutesPresent() throws IOException {
+    Batfish batfish = getBatfish("mikrotik-vlan-interfaces", ImmutableSet.of("mtik-edge-01"));
+    NetworkSnapshot snapshot = batfish.getSnapshot();
+    batfish.computeDataPlane(snapshot);
+
+    Configuration c = batfish.loadConfigurations(snapshot).get("mtik-edge-01");
+    assertThat(c, notNullValue());
+    Interface vlan25 = c.getAllInterfaces().get("vlan25");
+    Interface vlan30 = c.getAllInterfaces().get("vlan30");
+    assertThat(vlan25, notNullValue());
+    assertThat(vlan25.getActive(), equalTo(true));
+    assertThat(vlan25.getInactiveReason(), nullValue());
+    assertThat(vlan30, notNullValue());
+    assertThat(vlan30.getActive(), equalTo(true));
+    assertThat(vlan30.getInactiveReason(), nullValue());
+
+    DataPlane dp = batfish.loadDataPlane(snapshot);
+    Set<AbstractRoute> routes = dp.getRibs().get("mtik-edge-01", Configuration.DEFAULT_VRF_NAME).getRoutes();
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                r ->
+                    r.getProtocol() == RoutingProtocol.CONNECTED
+                        && r.getNetwork().equals(Prefix.parse("192.168.25.0/24"))),
+        equalTo(true));
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                r ->
+                    r.getProtocol() == RoutingProtocol.CONNECTED
+                        && r.getNetwork().equals(Prefix.parse("192.168.30.0/24"))),
+        equalTo(true));
   }
 
   private Batfish getBatfish(String testrigName, Iterable<String> configs) throws IOException {

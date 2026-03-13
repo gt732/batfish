@@ -4,10 +4,13 @@ import static com.google.common.base.MoreObjects.firstNonNull;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSet;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
@@ -25,10 +28,14 @@ public class MikrotikConfiguration extends VendorConfiguration {
   private @Nullable String _hostname;
   private final @Nonnull Map<String, MikrotikInterface> _interfaces;
   private final @Nonnull List<MikrotikStaticRoute> _staticRoutes;
+  private final @Nonnull List<MikrotikBridgePort> _bridgePorts;
+  private final @Nonnull List<MikrotikBridgeVlan> _bridgeVlans;
 
   public MikrotikConfiguration() {
     _interfaces = new HashMap<>();
     _staticRoutes = new ArrayList<>();
+    _bridgePorts = new ArrayList<>();
+    _bridgeVlans = new ArrayList<>();
   }
 
   @Override
@@ -52,6 +59,14 @@ public class MikrotikConfiguration extends VendorConfiguration {
 
   public @Nonnull List<MikrotikStaticRoute> getStaticRoutes() {
     return _staticRoutes;
+  }
+
+  public @Nonnull List<MikrotikBridgePort> getBridgePorts() {
+    return _bridgePorts;
+  }
+
+  public @Nonnull List<MikrotikBridgeVlan> getBridgeVlans() {
+    return _bridgeVlans;
   }
 
   @Override
@@ -80,6 +95,18 @@ public class MikrotikConfiguration extends VendorConfiguration {
     for (MikrotikStaticRoute sr : _staticRoutes) {
       vrf.getStaticRoutes().add(Conversions.toViStaticRoute(sr));
     }
+    Set<String> bridgeNames =
+        _interfaces.values().stream()
+            .filter(iface -> iface.getType().equalsIgnoreCase("bridge"))
+            .map(MikrotikInterface::getName)
+            .collect(ImmutableSet.toImmutableSet());
+    Map<String, MikrotikBridgePort> bridgePortsByInterface =
+        _bridgePorts.stream()
+            .collect(
+                ImmutableMap.toImmutableMap(
+                    MikrotikBridgePort::getInterface, Function.identity(), (existing, ignored) -> existing));
+    Conversions.applyBridgeVlanSwitchports(
+        _bridgeVlans, bridgePortsByInterface, c.getAllInterfaces(), bridgeNames);
 
     return c;
   }

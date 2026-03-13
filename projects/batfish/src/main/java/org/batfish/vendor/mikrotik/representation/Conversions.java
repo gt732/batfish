@@ -1,14 +1,22 @@
 package org.batfish.vendor.mikrotik.representation;
 
 import com.google.common.collect.ImmutableSet;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
+import org.batfish.datamodel.IntegerSpace;
 import org.batfish.datamodel.Interface;
+import org.batfish.datamodel.Interface.Dependency;
+import org.batfish.datamodel.Interface.DependencyType;
 import org.batfish.datamodel.InterfaceType;
 import org.batfish.datamodel.StaticRoute;
+import org.batfish.datamodel.SwitchportMode;
 import org.batfish.datamodel.route.nh.NextHopIp;
 
 /** Utilities for converting Mikrotik-specific representations to VI models. */
@@ -24,6 +32,8 @@ public final class Conversions {
     switch (type.toLowerCase(Locale.ROOT)) {
       case "loopback":
         return InterfaceType.LOOPBACK;
+      case "vlan":
+        return InterfaceType.VLAN;
       case "ether":
       case "ethernet":
       case "bridge":
@@ -51,7 +61,20 @@ public final class Conversions {
         builder.setSecondaryAddresses(ImmutableSet.copyOf(addresses.subList(1, addresses.size())));
       }
     }
-    return builder.build();
+
+    Integer vlanId = iface.getVlanId();
+    if (vlanId != null) {
+      builder.setVlan(vlanId);
+      // MikroTik /interface vlan behaves as routed L3 subinterface, not switch SVI autostate.
+      builder.setAutoState(false);
+    }
+
+    Interface viIface = builder.build();
+    String parentInterface = iface.getParentInterface();
+    if (parentInterface != null && !parentInterface.isEmpty()) {
+      viIface.setDependencies(ImmutableSet.of(new Dependency(parentInterface, DependencyType.BIND)));
+    }
+    return viIface;
   }
 
   public static @Nonnull StaticRoute toViStaticRoute(MikrotikStaticRoute route) {
@@ -60,5 +83,66 @@ public final class Conversions {
         .setNextHop(NextHopIp.of(route.getNextHopIp()))
         .setAdministrativeCost(route.getAdminDistance())
         .build();
+  }
+
+  public static void applyBridgeVlanSwitchports(
+      List<MikrotikBridgeVlan> bridgeVlans,
+      Map<String, MikrotikBridgePort> bridgePortsByInterface,
+      Map<String, Interface> viInterfaces,
+      Set<String> bridgeNames) {
+    Map<String, Set<Integer>> taggedVlans = new HashMap<>();
+    Map<String, Set<Integer>> untaggedVlans = new HashMap<>();
+    for (MikrotikBridgeVlan bridgeVlan : bridgeVlans) {
+      for (int vlanId : bridgeVlan.getVlanIds()) {
+        for (String port : bridgeVlan.getTagged()) {
+          if (bridgeNames.contains(port)) {
+            continue;
+          }
+          taggedVlans.computeIfAbsent(port, unused -> new HashSet<>()).add(vlanId);
+        }
+        for (String port : bridgeVlan.getUntagged()) {
+          if (bridgeNames.contains(port)) {
+            continue;
+          }
+          untaggedVlans.computeIfAbsent(port, unused -> new HashSet<>()).add(vlanId);
+        }
+      }
+    }
+
+    for (Map.Entry<String, Interface> entry : viInterfaces.entrySet()) {
+      String portName = entry.getKey();
+      Interface viIface = entry.getValue();
+      Set<Integer> tagged = taggedVlans.getOrDefault(portName, ImmutableSet.of());
+      Set<Integer> untagged = untaggedVlans.getOrDefault(portName, ImmutableSet.of());
+      if (tagged.isEmpty() && untagged.isEmpty()) {
+        continue;
+      }
+      viIface.setSwitchport(true);
+
+      if (tagged.isEmpty()) {
+        viIface.setSwitchportMode(SwitchportMode.ACCESS);
+        viIface.setAccessVlan(untagged.iterator().next());
+      } else {
+        viIface.setSwitchportMode(SwitchportMode.TRUNK);
+        Set<Integer> allVlans = new HashSet<>(tagged);
+        allVlans.addAll(untagged);
+        viIface.setAllowedVlans(
+            allVlans.stream()
+                .reduce(
+                    IntegerSpace.EMPTY,
+                    (acc, vlanId) -> acc.union(IntegerSpace.of(vlanId)),
+                    (a, b) -> a.union(b)));
+        Integer nativeVlan = null;
+        MikrotikBridgePort bridgePort = bridgePortsByInterface.get(portName);
+        if (bridgePort != null && bridgePort.getPvid() != null) {
+          nativeVlan = bridgePort.getPvid();
+        } else if (untagged.size() == 1) {
+          nativeVlan = untagged.iterator().next();
+        }
+        if (nativeVlan != null) {
+          viIface.setNativeVlan(nativeVlan);
+        }
+      }
+    }
   }
 }

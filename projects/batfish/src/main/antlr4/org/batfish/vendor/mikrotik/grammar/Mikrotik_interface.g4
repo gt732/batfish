@@ -40,12 +40,68 @@ interface_bridge_port_add_prop
 :
   if_prop_bridge
   | if_prop_interface
+  | if_bridge_port_prop_pvid
+  | key_value_parameter
+;
+
+if_bridge_port_prop_pvid
+:
+  PVID EQUALS parameter_value
+;
+
+interface_bridge_vlan_add
+:
+  BRIDGE VLAN ADD interface_bridge_vlan_add_prop*
+;
+
+interface_bridge_vlan_add_prop
+:
+  if_prop_bridge
+  | if_bridge_vlan_prop_vlan_ids
+  | if_bridge_vlan_prop_tagged
+  | if_bridge_vlan_prop_untagged
+  | key_value_parameter
+;
+
+if_bridge_vlan_prop_vlan_ids
+:
+  VLAN_IDS EQUALS parameter_value
+;
+
+if_bridge_vlan_prop_tagged
+:
+  TAGGED EQUALS parameter_value
+;
+
+if_bridge_vlan_prop_untagged
+:
+  UNTAGGED EQUALS parameter_value
+;
+
+interface_vlan_add
+:
+  VLAN ADD interface_vlan_add_prop*
+;
+
+interface_vlan_add_prop
+:
+  if_prop_name
+  | if_vlan_prop_vlan_id
+  | if_prop_interface
+  | if_prop_disabled
+  | if_prop_mtu
+  | if_prop_comment
   | key_value_parameter
 ;
 
 if_prop_name
 :
   NAME EQUALS parameter_value
+;
+
+if_vlan_prop_vlan_id
+:
+  VLAN_ID EQUALS parameter_value
 ;
 
 if_prop_disabled

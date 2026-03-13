@@ -46,6 +46,22 @@ public final class MikrotikInterface implements Serializable {
     _disabled = disabled;
   }
 
+  public @Nullable Integer getVlanId() {
+    return _vlanId;
+  }
+
+  public void setVlanId(@Nullable Integer vlanId) {
+    _vlanId = vlanId;
+  }
+
+  public @Nullable String getParentInterface() {
+    return _parentInterface;
+  }
+
+  public void setParentInterface(@Nullable String parentInterface) {
+    _parentInterface = parentInterface;
+  }
+
   public @Nonnull List<ConcreteInterfaceAddress> getAddresses() {
     return _addresses;
   }
@@ -58,5 +74,7 @@ public final class MikrotikInterface implements Serializable {
   private @Nonnull String _type;
   private @Nullable Integer _mtu;
   private boolean _disabled;
+  private @Nullable Integer _vlanId;
+  private @Nullable String _parentInterface;
   private final @Nonnull List<ConcreteInterfaceAddress> _addresses;
 }

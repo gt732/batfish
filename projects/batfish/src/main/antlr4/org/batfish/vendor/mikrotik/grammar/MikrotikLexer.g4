@@ -69,6 +69,16 @@ WIRELESS
   'wireless'
 ;
 
+VLAN
+:
+  'vlan'
+;
+
+VLAN_ID
+:
+  'vlan-id'
+;
+
 SECURITY_PROFILES
 :
   'security-profiles'
@@ -229,6 +239,11 @@ MTU
   'mtu'
 ;
 
+PVID
+:
+  'pvid'
+;
+
 DISABLE_RUNNING_CHECK
 :
   'disable-running-check'
@@ -247,6 +262,21 @@ YES
 NO
 :
   'no'
+;
+
+TAGGED
+:
+  'tagged'
+;
+
+UNTAGGED
+:
+  'untagged'
+;
+
+VLAN_IDS
+:
+  'vlan-ids'
 ;
 
 IP_PREFIX

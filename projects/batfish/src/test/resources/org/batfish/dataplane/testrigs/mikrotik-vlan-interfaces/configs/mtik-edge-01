@@ -1,0 +1,18 @@
+# mar/12/2026 16:20:36 by RouterOS 6.49.17
+/interface bridge add comment="LAN bridge" name=bridge-lan
+/interface ethernet set [ find default-name=ether2 ] disable-running-check=no name=customer-a
+/interface ethernet set [ find default-name=ether3 ] disable-running-check=no name=customer-b
+/interface ethernet set [ find default-name=ether6 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether4 ] disable-running-check=no name=mgmt
+/interface ethernet set [ find default-name=ether1 ] disable-running-check=no name=uplink-core
+/interface vlan add interface=bridge-lan name=vlan25 vlan-id=25
+/interface vlan add interface=ether6 name=vlan30 vlan-id=30
+/interface bridge port add bridge=bridge-lan interface=customer-a
+/interface bridge port add bridge=bridge-lan interface=customer-b
+/ip address add address=10.0.0.2/30 comment="L3 to Cisco core" interface=uplink-core network=10.0.0.0
+/ip address add address=192.168.10.1/24 comment="subscriber gateway" interface=bridge-lan network=192.168.10.0
+/ip address add address=172.16.0.2/24 comment=management interface=mgmt network=172.16.0.0
+/ip address add address=192.168.25.1/24 interface=vlan25 network=192.168.25.0
+/ip address add address=192.168.30.1/24 interface=vlan30 network=192.168.30.0
+/ip route add comment="default to core" distance=1 gateway=10.0.0.1
+/system identity set name=mtik-edge-01

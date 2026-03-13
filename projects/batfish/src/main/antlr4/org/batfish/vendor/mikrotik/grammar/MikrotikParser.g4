@@ -37,7 +37,9 @@ interface_type_command
 :
   interface_bridge_add
   | interface_bridge_port_add
+  | interface_bridge_vlan_add
   | interface_ethernet_set
+  | interface_vlan_add
   | WIRELESS SECURITY_PROFILES command_tail?
   | command_tail?
 ;

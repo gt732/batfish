@@ -11,6 +11,8 @@ word
   | PORT
   | ETHERNET
   | WIRELESS
+  | VLAN
+  | VLAN_ID
   | SECURITY_PROFILES
   | IP
   | ADDRESS
@@ -43,6 +45,10 @@ word
   | DISABLED
   | COMMENT
   | MTU
+  | PVID
+  | TAGGED
+  | UNTAGGED
+  | VLAN_IDS
   | DISABLE_RUNNING_CHECK
   | NETWORK
   | YES

@@ -2,9 +2,15 @@ package org.batfish.vendor.mikrotik.grammar;
 
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.STATIC_ROUTE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_PORT_BRIDGE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_PORT_INTERFACE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_BRIDGE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_TAGGED_INTERFACE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_UNTAGGED_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.INTERFACE_SELF_REFERENCE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.IP_ADDRESS_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.STATIC_ROUTE_SELF_REFERENCE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.VLAN_INTERFACE_PARENT;
 
 import java.util.Optional;
 import javax.annotation.Nonnull;
@@ -24,6 +30,8 @@ import org.batfish.grammar.ControlPlaneExtractor;
 import org.batfish.grammar.UnrecognizedLineToken;
 import org.batfish.grammar.silent_syntax.SilentSyntaxCollection;
 import org.batfish.vendor.VendorConfiguration;
+import org.batfish.vendor.mikrotik.representation.MikrotikBridgePort;
+import org.batfish.vendor.mikrotik.representation.MikrotikBridgeVlan;
 import org.batfish.vendor.mikrotik.representation.MikrotikConfiguration;
 import org.batfish.vendor.mikrotik.representation.MikrotikInterface;
 import org.batfish.vendor.mikrotik.representation.MikrotikStaticRoute;
@@ -110,10 +118,21 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
             .filter(prop -> prop.if_prop_name() != null)
             .map(prop -> extractParameterValue(prop.if_prop_name().parameter_value()))
             .findFirst();
-    if (maybeName.isEmpty()) {
+    Optional<String> maybeDefaultName =
+        Optional.ofNullable(ctx.bracket_expression())
+            .map(MikrotikParser.Bracket_expressionContext::line_command)
+            .stream()
+            .flatMap(lineCommand -> lineCommand.command_argument().stream())
+            .map(MikrotikParser.Command_argumentContext::key_value_parameter)
+            .filter(param -> param != null && param.word() != null && param.parameter_value() != null)
+            .filter(param -> param.word().getText().equalsIgnoreCase("default-name"))
+            .map(param -> extractParameterValue(param.parameter_value()))
+            .findFirst();
+    Optional<String> ifaceName = maybeName.isPresent() ? maybeName : maybeDefaultName;
+    if (ifaceName.isEmpty()) {
       return;
     }
-    String name = maybeName.get();
+    String name = ifaceName.get();
     MikrotikInterface iface = getOrCreateInterface(name, "ethernet");
     iface.setType("ethernet");
     for (MikrotikParser.Interface_ethernet_set_propContext prop : ctx.interface_ethernet_set_prop()) {
@@ -126,6 +145,166 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
     _configuration.defineStructure(INTERFACE, name, ctx);
     _configuration.referenceStructure(
         INTERFACE, name, INTERFACE_SELF_REFERENCE, ctx.getStart().getLine());
+  }
+
+  @Override
+  public void enterInterface_vlan_add(MikrotikParser.Interface_vlan_addContext ctx) {
+    Optional<String> maybeName =
+        ctx.interface_vlan_add_prop().stream()
+            .filter(prop -> prop.if_prop_name() != null)
+            .map(prop -> extractParameterValue(prop.if_prop_name().parameter_value()))
+            .findFirst();
+    if (maybeName.isEmpty()) {
+      return;
+    }
+    String name = maybeName.get();
+    MikrotikInterface iface = getOrCreateInterface(name, "vlan");
+    iface.setType("vlan");
+    for (MikrotikParser.Interface_vlan_add_propContext prop : ctx.interface_vlan_add_prop()) {
+      if (prop.if_vlan_prop_vlan_id() != null) {
+        String rawVlanId = extractParameterValue(prop.if_vlan_prop_vlan_id().parameter_value());
+        try {
+          iface.setVlanId(Integer.parseInt(rawVlanId));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid vlan-id value '%s' for interface %s", rawVlanId, name));
+        }
+      } else if (prop.if_prop_interface() != null) {
+        iface.setParentInterface(extractParameterValue(prop.if_prop_interface().parameter_value()));
+      } else if (prop.if_prop_disabled() != null) {
+        iface.setDisabled(parseBoolean(extractParameterValue(prop.if_prop_disabled().parameter_value())));
+      } else if (prop.if_prop_mtu() != null) {
+        String rawMtu = extractParameterValue(prop.if_prop_mtu().parameter_value());
+        try {
+          iface.setMtu(Integer.parseInt(rawMtu));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
+        }
+      }
+    }
+    Optional.ofNullable(iface.getParentInterface())
+        .ifPresent(
+            parent ->
+                _configuration.referenceStructure(
+                    INTERFACE, parent, VLAN_INTERFACE_PARENT, ctx.getStart().getLine()));
+    _configuration.defineStructure(INTERFACE, name, ctx);
+    _configuration.referenceStructure(
+        INTERFACE, name, INTERFACE_SELF_REFERENCE, ctx.getStart().getLine());
+  }
+
+  @Override
+  public void enterInterface_bridge_port_add(MikrotikParser.Interface_bridge_port_addContext ctx) {
+    Optional<String> maybeBridge =
+        ctx.interface_bridge_port_add_prop().stream()
+            .filter(prop -> prop.if_prop_bridge() != null)
+            .map(prop -> extractParameterValue(prop.if_prop_bridge().parameter_value()))
+            .findFirst();
+    Optional<String> maybeIface =
+        ctx.interface_bridge_port_add_prop().stream()
+            .filter(prop -> prop.if_prop_interface() != null)
+            .map(prop -> extractParameterValue(prop.if_prop_interface().parameter_value()))
+            .findFirst();
+    if (maybeBridge.isEmpty() || maybeIface.isEmpty()) {
+      return;
+    }
+
+    MikrotikBridgePort bridgePort = new MikrotikBridgePort(maybeBridge.get(), maybeIface.get());
+    for (MikrotikParser.Interface_bridge_port_add_propContext prop :
+        ctx.interface_bridge_port_add_prop()) {
+      if (prop.if_bridge_port_prop_pvid() == null) {
+        continue;
+      }
+      String rawPvid = extractParameterValue(prop.if_bridge_port_prop_pvid().parameter_value());
+      try {
+        bridgePort.setPvid(Integer.parseInt(rawPvid));
+      } catch (NumberFormatException e) {
+        _w.addWarning(
+            ctx,
+            getFullText(ctx),
+            _parser,
+            String.format("Invalid pvid value '%s' for interface %s", rawPvid, maybeIface.get()));
+      }
+    }
+
+    _configuration.getBridgePorts().add(bridgePort);
+    _configuration.referenceStructure(
+        INTERFACE, maybeBridge.get(), BRIDGE_PORT_BRIDGE, ctx.getStart().getLine());
+    _configuration.referenceStructure(
+        INTERFACE, maybeIface.get(), BRIDGE_PORT_INTERFACE, ctx.getStart().getLine());
+  }
+
+  @Override
+  public void enterInterface_bridge_vlan_add(MikrotikParser.Interface_bridge_vlan_addContext ctx) {
+    Optional<String> maybeBridge =
+        ctx.interface_bridge_vlan_add_prop().stream()
+            .filter(prop -> prop.if_prop_bridge() != null)
+            .map(prop -> extractParameterValue(prop.if_prop_bridge().parameter_value()))
+            .findFirst();
+    if (maybeBridge.isEmpty()) {
+      return;
+    }
+
+    MikrotikBridgeVlan bridgeVlan = new MikrotikBridgeVlan(maybeBridge.get());
+    for (MikrotikParser.Interface_bridge_vlan_add_propContext prop :
+        ctx.interface_bridge_vlan_add_prop()) {
+      if (prop.if_bridge_vlan_prop_vlan_ids() != null) {
+        String raw = extractParameterValue(prop.if_bridge_vlan_prop_vlan_ids().parameter_value());
+        for (String part : raw.split(",")) {
+          String vlanId = part.trim();
+          if (vlanId.isEmpty()) {
+            continue;
+          }
+          try {
+            bridgeVlan.addVlanId(Integer.parseInt(vlanId));
+          } catch (NumberFormatException e) {
+            _w.addWarning(
+                ctx,
+                getFullText(ctx),
+                _parser,
+                String.format("Invalid vlan-id '%s' in bridge vlan entry", vlanId));
+          }
+        }
+      } else if (prop.if_bridge_vlan_prop_tagged() != null) {
+        String raw = extractParameterValue(prop.if_bridge_vlan_prop_tagged().parameter_value());
+        for (String part : raw.split(",")) {
+          String port = part.trim();
+          if (!port.isEmpty()) {
+            bridgeVlan.addTagged(port);
+          }
+        }
+      } else if (prop.if_bridge_vlan_prop_untagged() != null) {
+        String raw = extractParameterValue(prop.if_bridge_vlan_prop_untagged().parameter_value());
+        for (String part : raw.split(",")) {
+          String port = part.trim();
+          if (!port.isEmpty()) {
+            bridgeVlan.addUntagged(port);
+          }
+        }
+      }
+    }
+
+    _configuration.getBridgeVlans().add(bridgeVlan);
+    _configuration.referenceStructure(
+        INTERFACE, maybeBridge.get(), BRIDGE_VLAN_BRIDGE, ctx.getStart().getLine());
+    bridgeVlan
+        .getTagged()
+        .forEach(
+            port ->
+                _configuration.referenceStructure(
+                    INTERFACE, port, BRIDGE_VLAN_TAGGED_INTERFACE, ctx.getStart().getLine()));
+    bridgeVlan
+        .getUntagged()
+        .forEach(
+            port ->
+                _configuration.referenceStructure(
+                    INTERFACE, port, BRIDGE_VLAN_UNTAGGED_INTERFACE, ctx.getStart().getLine()));
   }
 
   @Override
