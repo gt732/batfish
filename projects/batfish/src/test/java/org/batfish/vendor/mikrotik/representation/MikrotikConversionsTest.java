@@ -2,6 +2,7 @@ package org.batfish.vendor.mikrotik.representation;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
 
@@ -54,6 +55,38 @@ public final class MikrotikConversionsTest {
     Interface viIface = Conversions.toViInterface(iface);
 
     assertThat(viIface.getInterfaceType(), equalTo(InterfaceType.PHYSICAL));
+  }
+
+  @Test
+  public void testToViInterfaceBondingTypeAndAggregateDependencies() {
+    MikrotikInterface iface = new MikrotikInterface("bond-core", "bonding");
+    iface.addSlave("ether1");
+    iface.addSlave("ether2");
+
+    Interface viIface = Conversions.toViInterface(iface);
+
+    assertThat(viIface.getInterfaceType(), equalTo(InterfaceType.AGGREGATED));
+    assertThat(
+        viIface.getDependencies(),
+        containsInAnyOrder(
+            new Interface.Dependency("ether1", Interface.DependencyType.AGGREGATE),
+            new Interface.Dependency("ether2", Interface.DependencyType.AGGREGATE)));
+    assertThat(viIface.getChannelGroupMembers(), containsInAnyOrder("ether1", "ether2"));
+  }
+
+  @Test
+  public void testToViInterfaceVlanOverBondingBindDependency() {
+    MikrotikInterface iface = new MikrotikInterface("vlan200-bond-wan", "vlan");
+    iface.setVlanId(200);
+    iface.setParentInterface("bond-core");
+
+    Interface viIface = Conversions.toViInterface(iface);
+
+    assertThat(viIface.getInterfaceType(), equalTo(InterfaceType.VLAN));
+    assertThat(viIface.getVlan(), equalTo(200));
+    assertThat(
+        viIface.getDependencies(),
+        contains(new Interface.Dependency("bond-core", Interface.DependencyType.BIND)));
   }
 
   @Test
@@ -143,6 +176,12 @@ public final class MikrotikConversionsTest {
     MikrotikInterface mainIface = new MikrotikInterface("ether1", "ether");
     mainIface.addAddress(ConcreteInterfaceAddress.parse("192.0.2.1/24"));
     vc.getMainVrf().getInterfaces().put(mainIface.getName(), mainIface);
+    MikrotikInterface ether2 = new MikrotikInterface("ether2", "ether");
+    vc.getMainVrf().getInterfaces().put(ether2.getName(), ether2);
+    MikrotikInterface bondCore = new MikrotikInterface("bond-core", "bonding");
+    bondCore.addSlave("ether1");
+    bondCore.addSlave("ether2");
+    vc.getMainVrf().getInterfaces().put(bondCore.getName(), bondCore);
     vc.getMainVrf()
         .getStaticRoutes()
         .add(new MikrotikStaticRoute(Prefix.parse("0.0.0.0/0"), Ip.parse("192.0.2.254"), 10));
@@ -160,6 +199,11 @@ public final class MikrotikConversionsTest {
     assertThat(c.getAllInterfaces().get("ether1").getOwner(), equalTo(c));
     assertThat(c.getAllInterfaces().get("ether1").getVrfName(), equalTo(Configuration.DEFAULT_VRF_NAME));
     assertThat(c.getAllInterfaces().get("vlan25").getVrfName(), equalTo("blue"));
+    assertThat(
+        c.getAllInterfaces().get("bond-core").getChannelGroupMembers(),
+        containsInAnyOrder("ether1", "ether2"));
+    assertThat(c.getAllInterfaces().get("ether1").getChannelGroup(), equalTo("bond-core"));
+    assertThat(c.getAllInterfaces().get("ether2").getChannelGroup(), equalTo("bond-core"));
     assertThat(
         c.getVrfs().get(Configuration.DEFAULT_VRF_NAME).getStaticRoutes().first().getNetwork(),
         equalTo(Prefix.ZERO));

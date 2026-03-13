@@ -38,6 +38,8 @@ public final class Conversions {
         return InterfaceType.LOOPBACK;
       case "vlan":
         return InterfaceType.VLAN;
+      case "bonding":
+        return InterfaceType.AGGREGATED;
       case "ether":
       case "ethernet":
       case "bridge":
@@ -77,6 +79,12 @@ public final class Conversions {
     String parentInterface = iface.getParentInterface();
     if (parentInterface != null && !parentInterface.isEmpty()) {
       viIface.setDependencies(ImmutableSet.of(new Dependency(parentInterface, DependencyType.BIND)));
+    } else if (!iface.getSlaves().isEmpty()) {
+      viIface.setChannelGroupMembers(iface.getSlaves());
+      viIface.setDependencies(
+          iface.getSlaves().stream()
+              .map(slave -> new Dependency(slave, DependencyType.AGGREGATE))
+              .collect(ImmutableSet.toImmutableSet()));
     }
     return viIface;
   }
@@ -111,6 +119,26 @@ public final class Conversions {
                 viIface.setOwner(c);
                 viIface.setVrf(viVrf);
                 c.getAllInterfaces().put(viIface.getName(), viIface);
+              });
+      // Populate aggregate/member metadata used by interfaceProperties:
+      // aggregate gets Channel_Group_Members, and each member points back via Channel_Group.
+      mikrotikVrf
+          .getInterfaces()
+          .values()
+          .forEach(
+              iface -> {
+                if (!iface.getType().equalsIgnoreCase("bonding")) {
+                  return;
+                }
+                Interface aggregate = c.getAllInterfaces().get(iface.getName());
+                if (aggregate == null) {
+                  return;
+                }
+                List<String> presentSlaves =
+                    iface.getSlaves().stream().filter(c.getAllInterfaces()::containsKey).toList();
+                aggregate.setChannelGroupMembers(presentSlaves);
+                presentSlaves.forEach(
+                    slaveName -> c.getAllInterfaces().get(slaveName).setChannelGroup(iface.getName()));
               });
       mikrotikVrf
           .getStaticRoutes()

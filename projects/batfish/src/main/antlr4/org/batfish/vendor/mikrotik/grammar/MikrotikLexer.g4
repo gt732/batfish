@@ -54,6 +54,11 @@ BRIDGE
   'bridge'
 ;
 
+BONDING
+:
+  'bonding'
+;
+
 PORT
 :
   'port'
@@ -77,6 +82,21 @@ VLAN
 VLAN_ID
 :
   'vlan-id'
+;
+
+SLAVES
+:
+  'slaves'
+;
+
+MODE
+:
+  'mode'
+;
+
+LACP_RATE
+:
+  'lacp-rate'
 ;
 
 SECURITY_PROFILES

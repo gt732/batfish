@@ -2,6 +2,7 @@ package org.batfish.vendor.mikrotik.grammar;
 
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.STATIC_ROUTE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BONDING_SLAVE_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_PORT_BRIDGE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_PORT_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_BRIDGE;
@@ -12,6 +13,8 @@ import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.STATIC_ROUTE_SELF_REFERENCE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.VLAN_INTERFACE_PARENT;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import javax.annotation.Nonnull;
 import javax.annotation.ParametersAreNonnullByDefault;
@@ -51,6 +54,7 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
     _w = warnings;
     _silentSyntax = silentSyntax;
     _configuration = new MikrotikConfiguration();
+    _pendingInterfaceReferences = new ArrayList<>();
   }
 
   @Override
@@ -94,6 +98,21 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
   }
 
   @Override
+  public void exitMikrotik_configuration(MikrotikParser.Mikrotik_configurationContext ctx) {
+    _pendingInterfaceReferences.stream()
+        .filter(
+            reference ->
+                !_configuration.getMainVrf().getInterfaces().containsKey(reference._referencedInterface))
+        .forEach(
+            reference ->
+                _w.addWarning(
+                    reference._ctx,
+                    getFullText(reference._ctx),
+                    _parser,
+                    reference._warningMessage));
+  }
+
+  @Override
   public void enterInterface_bridge_add(MikrotikParser.Interface_bridge_addContext ctx) {
     Optional<String> maybeName =
         ctx.interface_bridge_add_prop().stream()
@@ -106,6 +125,63 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
     String name = maybeName.get();
     MikrotikInterface iface = getOrCreateInterface(name, "bridge");
     iface.setType("bridge");
+    _configuration.defineStructure(INTERFACE, name, ctx);
+    _configuration.referenceStructure(
+        INTERFACE, name, INTERFACE_SELF_REFERENCE, ctx.getStart().getLine());
+  }
+
+  @Override
+  public void enterInterface_bonding_add(MikrotikParser.Interface_bonding_addContext ctx) {
+    Optional<String> maybeName =
+        ctx.interface_bonding_add_prop().stream()
+            .filter(prop -> prop.if_prop_name() != null)
+            .map(prop -> extractParameterValue(prop.if_prop_name().parameter_value()))
+            .findFirst();
+    if (maybeName.isEmpty()) {
+      return;
+    }
+    String name = maybeName.get();
+    MikrotikInterface iface = getOrCreateInterface(name, "bonding");
+    iface.setType("bonding");
+    iface.getSlaves().clear();
+    for (MikrotikParser.Interface_bonding_add_propContext prop : ctx.interface_bonding_add_prop()) {
+      if (prop.if_bonding_prop_slaves() != null) {
+        String rawSlaves = extractParameterValue(prop.if_bonding_prop_slaves().parameter_value());
+        for (String slave : rawSlaves.split(",")) {
+          String trimmed = slave.trim();
+          if (trimmed.isEmpty()) {
+            continue;
+          }
+          iface.addSlave(trimmed);
+          _pendingInterfaceReferences.add(
+              new PendingInterfaceReference(
+                  ctx,
+                  trimmed,
+                  String.format(
+                      "Bonding interface %s references undefined slave interface %s",
+                      name, trimmed)));
+          _configuration.referenceStructure(
+              INTERFACE, trimmed, BONDING_SLAVE_INTERFACE, ctx.getStart().getLine());
+        }
+      } else if (prop.if_bonding_prop_mode() != null) {
+        iface.setBondingMode(extractParameterValue(prop.if_bonding_prop_mode().parameter_value()));
+      } else if (prop.if_bonding_prop_lacp_rate() != null) {
+        iface.setLacpRate(extractParameterValue(prop.if_bonding_prop_lacp_rate().parameter_value()));
+      } else if (prop.if_prop_disabled() != null) {
+        iface.setDisabled(parseBoolean(extractParameterValue(prop.if_prop_disabled().parameter_value())));
+      } else if (prop.if_prop_mtu() != null) {
+        String rawMtu = extractParameterValue(prop.if_prop_mtu().parameter_value());
+        try {
+          iface.setMtu(Integer.parseInt(rawMtu));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
+        }
+      }
+    }
     _configuration.defineStructure(INTERFACE, name, ctx);
     _configuration.referenceStructure(
         INTERFACE, name, INTERFACE_SELF_REFERENCE, ctx.getStart().getLine());
@@ -173,7 +249,15 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
               String.format("Invalid vlan-id value '%s' for interface %s", rawVlanId, name));
         }
       } else if (prop.if_prop_interface() != null) {
-        iface.setParentInterface(extractParameterValue(prop.if_prop_interface().parameter_value()));
+        String parentInterface = extractParameterValue(prop.if_prop_interface().parameter_value());
+        iface.setParentInterface(parentInterface);
+        _pendingInterfaceReferences.add(
+            new PendingInterfaceReference(
+                ctx,
+                parentInterface,
+                String.format(
+                    "VLAN interface %s references undefined parent interface %s",
+                    name, parentInterface)));
       } else if (prop.if_prop_disabled() != null) {
         iface.setDisabled(parseBoolean(extractParameterValue(prop.if_prop_disabled().parameter_value())));
       } else if (prop.if_prop_mtu() != null) {
@@ -437,7 +521,21 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
         .computeIfAbsent(name, key -> new MikrotikInterface(key, type));
   }
 
+  private static final class PendingInterfaceReference {
+    private final @Nonnull ParserRuleContext _ctx;
+    private final @Nonnull String _referencedInterface;
+    private final @Nonnull String _warningMessage;
+
+    private PendingInterfaceReference(
+        ParserRuleContext ctx, String referencedInterface, String warningMessage) {
+      _ctx = ctx;
+      _referencedInterface = referencedInterface;
+      _warningMessage = warningMessage;
+    }
+  }
+
   private final @Nonnull MikrotikConfiguration _configuration;
+  private final @Nonnull List<PendingInterfaceReference> _pendingInterfaceReferences;
   private final @Nonnull MikrotikCombinedParser _parser;
   private final @Nonnull SilentSyntaxCollection _silentSyntax;
   private final @Nonnull String _text;

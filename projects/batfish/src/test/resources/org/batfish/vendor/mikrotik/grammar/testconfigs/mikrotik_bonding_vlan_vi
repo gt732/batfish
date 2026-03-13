@@ -1,0 +1,37 @@
+# mar/13/2026 16:43:38 by RouterOS 6.49.17
+# software id =
+#
+#
+#
+/interface bridge add name=bridge-lan vlan-filtering=yes
+/interface ethernet set [ find default-name=ether1 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether2 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether3 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether4 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether5 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether6 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether7 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether8 ] disable-running-check=no
+/interface vlan add interface=bridge-lan mtu=1496 name=vlan10-users vlan-id=10
+/interface vlan add interface=bridge-lan mtu=1496 name=vlan20-servers vlan-id=20
+/interface vlan add interface=bridge-lan mtu=1496 name=vlan30-voice vlan-id=30
+/interface vlan add interface=bridge-lan mtu=1496 name=vlan40-guest vlan-id=40
+/interface bonding add lacp-rate=1sec mode=802.3ad name=bond-core slaves=ether1,ether2
+/interface vlan add interface=bond-core mtu=1496 name=vlan200-bond-wan vlan-id=200
+/interface bridge port add bridge=bridge-lan interface=bond-core
+/interface bridge port add bridge=bridge-lan interface=ether3 pvid=10
+/interface bridge port add bridge=bridge-lan interface=ether4 pvid=20
+/interface bridge port add bridge=bridge-lan interface=ether5 pvid=30
+/interface bridge vlan add bridge=bridge-lan tagged=bridge-lan,bond-core untagged=ether3 vlan-ids=10
+/interface bridge vlan add bridge=bridge-lan tagged=bridge-lan,bond-core untagged=ether4 vlan-ids=20
+/interface bridge vlan add bridge=bridge-lan tagged=bridge-lan,bond-core,ether5 vlan-ids=30
+/interface bridge vlan add bridge=bridge-lan tagged=bridge-lan,bond-core,ether5 vlan-ids=40
+/ip address add address=10.10.10.1/24 interface=vlan10-users network=10.10.10.0
+/ip address add address=10.20.20.1/24 interface=vlan20-servers network=10.20.20.0
+/ip address add address=10.30.30.1/24 interface=vlan30-voice network=10.30.30.0
+/ip address add address=10.40.40.1/24 interface=vlan40-guest network=10.40.40.0
+/ip address add address=172.16.200.2/30 interface=vlan200-bond-wan network=172.16.200.0
+/ip address add address=192.0.2.2/30 interface=ether6 network=192.0.2.0
+/ip route add distance=1 gateway=172.16.200.1
+/ip route add distance=1 dst-address=198.51.100.0/24 gateway=192.0.2.1
+/system identity set name=mt-story51-lab

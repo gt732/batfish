@@ -16,6 +16,7 @@ public final class MikrotikInterface implements Serializable {
     _name = name;
     _type = type;
     _addresses = new ArrayList<>();
+    _slaves = new ArrayList<>();
   }
 
   public @Nonnull String getName() {
@@ -70,6 +71,30 @@ public final class MikrotikInterface implements Serializable {
     _addresses.add(address);
   }
 
+  public @Nonnull List<String> getSlaves() {
+    return _slaves;
+  }
+
+  public void addSlave(String slave) {
+    _slaves.add(slave);
+  }
+
+  public @Nullable String getBondingMode() {
+    return _bondingMode;
+  }
+
+  public void setBondingMode(@Nullable String bondingMode) {
+    _bondingMode = bondingMode;
+  }
+
+  public @Nullable String getLacpRate() {
+    return _lacpRate;
+  }
+
+  public void setLacpRate(@Nullable String lacpRate) {
+    _lacpRate = lacpRate;
+  }
+
   private final @Nonnull String _name;
   private @Nonnull String _type;
   private @Nullable Integer _mtu;
@@ -77,4 +102,7 @@ public final class MikrotikInterface implements Serializable {
   private @Nullable Integer _vlanId;
   private @Nullable String _parentInterface;
   private final @Nonnull List<ConcreteInterfaceAddress> _addresses;
+  private final @Nonnull List<String> _slaves;
+  private @Nullable String _bondingMode;
+  private @Nullable String _lacpRate;
 }

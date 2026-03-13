@@ -8,11 +8,15 @@ word
 :
   INTERFACE
   | BRIDGE
+  | BONDING
   | PORT
   | ETHERNET
   | WIRELESS
   | VLAN
   | VLAN_ID
+  | SLAVES
+  | MODE
+  | LACP_RATE
   | SECURITY_PROFILES
   | IP
   | ADDRESS

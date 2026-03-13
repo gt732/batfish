@@ -36,6 +36,7 @@ interface_command
 interface_type_command
 :
   interface_bridge_add
+  | interface_bonding_add
   | interface_bridge_port_add
   | interface_bridge_vlan_add
   | interface_ethernet_set

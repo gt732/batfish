@@ -4,6 +4,7 @@ import static com.google.common.collect.Iterables.getOnlyElement;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.batfish.common.util.Resources.readResource;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.INTERFACE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BONDING_SLAVE_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_PORT_BRIDGE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_PORT_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_BRIDGE;
@@ -20,9 +21,11 @@ import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.notNullValue;
 
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Multiset;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.ParserRuleContext;
 import org.antlr.v4.runtime.Token;
@@ -30,20 +33,27 @@ import org.batfish.common.BatfishLogger;
 import org.batfish.common.NetworkSnapshot;
 import org.batfish.common.Warnings;
 import org.batfish.config.Settings;
+import org.batfish.datamodel.AbstractRoute;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Configuration;
+import org.batfish.datamodel.DataPlane;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Prefix;
+import org.batfish.datamodel.RoutingProtocol;
 import org.batfish.grammar.silent_syntax.SilentSyntaxCollection;
 import org.batfish.identifiers.NetworkId;
 import org.batfish.identifiers.SnapshotId;
 import org.batfish.main.Batfish;
+import org.batfish.main.BatfishTestUtils;
+import org.batfish.main.TestrigText;
 import org.batfish.vendor.mikrotik.representation.MikrotikBridgePort;
 import org.batfish.vendor.mikrotik.representation.MikrotikBridgeVlan;
 import org.batfish.vendor.mikrotik.representation.MikrotikConfiguration;
 import org.batfish.vendor.mikrotik.representation.MikrotikInterface;
 import org.batfish.vendor.mikrotik.representation.MikrotikStaticRoute;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 import org.junit.runner.RunWith;
 import org.junit.runners.JUnit4;
 
@@ -52,6 +62,8 @@ public class MikrotikGrammarTest {
 
   private static final String TESTCONFIGS_PREFIX =
       "org/batfish/vendor/mikrotik/grammar/testconfigs/";
+
+  @Rule public TemporaryFolder _folder = new TemporaryFolder();
 
   @Test
   public void testLexerTokenizesRouterOsSyntax() {
@@ -79,6 +91,37 @@ public class MikrotikGrammarTest {
 
     assertThat(parser, notNullValue());
     assertThat(tree, notNullValue());
+  }
+
+  @Test
+  public void testParserParsesInlineBondingCommand() {
+    String src =
+        "/interface bonding add lacp-rate=1sec mode=802.3ad name=bond-core slaves=ether1,ether2\n";
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    assertThat(tree, notNullValue());
+    assertThat(tree.toStringTree(parser.getParser()), containsString("interface_bonding_add"));
+    assertThat(tree.toStringTree(parser.getParser()), containsString("if_bonding_prop_mode"));
+    assertThat(tree.toStringTree(parser.getParser()), containsString("if_bonding_prop_lacp_rate"));
+    assertThat(tree.toStringTree(parser.getParser()), containsString("if_bonding_prop_slaves"));
+  }
+
+  @Test
+  public void testParserParsesBondingVlanFixture() {
+    String src = readResource(TESTCONFIGS_PREFIX + "mikrotik_bonding_vlan_vi", UTF_8);
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    assertThat(tree, notNullValue());
+    assertThat(tree.toStringTree(parser.getParser()), containsString("interface_bonding_add"));
+    assertThat(tree.toStringTree(parser.getParser()), containsString("interface_vlan_add"));
   }
 
   @Test
@@ -194,6 +237,175 @@ public class MikrotikGrammarTest {
     assertThat(references, hasKey("bridge-lan"));
     assertThat(references.get("bridge-lan"), hasKey(VLAN_INTERFACE_PARENT));
     assertThat(references.get("bridge-lan").get(VLAN_INTERFACE_PARENT), hasItem(3));
+  }
+
+  @Test
+  public void testExtractorBondingFieldsInline() {
+    String src =
+        "/interface ethernet set [ find default-name=ether1 ] disable-running-check=no\n"
+            + "/interface ethernet set [ find default-name=ether2 ] disable-running-check=no\n"
+            + "/interface bonding add lacp-rate=1sec mode=802.3ad name=bond-core slaves=ether1,ether2\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface bondCore = result._configuration.getMainVrf().getInterfaces().get("bond-core");
+    assertThat(bondCore, notNullValue());
+    assertThat(bondCore.getType(), equalTo("bonding"));
+    assertThat(bondCore.getSlaves(), contains("ether1", "ether2"));
+    assertThat(bondCore.getBondingMode(), equalTo("802.3ad"));
+    assertThat(bondCore.getLacpRate(), equalTo("1sec"));
+
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+
+    Map<String, Map<org.batfish.vendor.StructureUsage, Multiset<Integer>>> references =
+        result._configuration.getStructureManager().getStructureReferences(INTERFACE);
+    assertThat(references, hasKey("ether1"));
+    assertThat(references.get("ether1"), hasKey(BONDING_SLAVE_INTERFACE));
+    assertThat(references, hasKey("ether2"));
+    assertThat(references.get("ether2"), hasKey(BONDING_SLAVE_INTERFACE));
+  }
+
+  @Test
+  public void testExtractorVlanParentOnBondInline() {
+    String src =
+        "/interface ethernet set [ find default-name=ether1 ] disable-running-check=no\n"
+            + "/interface ethernet set [ find default-name=ether2 ] disable-running-check=no\n"
+            + "/interface bonding add lacp-rate=1sec mode=802.3ad name=bond-core slaves=ether1,ether2\n"
+            + "/interface vlan add interface=bond-core name=vlan200-bond-wan vlan-id=200\n"
+            + "/ip address add address=172.16.200.2/30 interface=vlan200-bond-wan network=172.16.200.0\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface vlan200 =
+        result._configuration.getMainVrf().getInterfaces().get("vlan200-bond-wan");
+    assertThat(vlan200, notNullValue());
+    assertThat(vlan200.getType(), equalTo("vlan"));
+    assertThat(vlan200.getVlanId(), equalTo(200));
+    assertThat(vlan200.getParentInterface(), equalTo("bond-core"));
+    assertThat(vlan200.getAddresses(), contains(ConcreteInterfaceAddress.parse("172.16.200.2/30")));
+
+    Map<String, Map<org.batfish.vendor.StructureUsage, Multiset<Integer>>> references =
+        result._configuration.getStructureManager().getStructureReferences(INTERFACE);
+    assertThat(references, hasKey("bond-core"));
+    assertThat(references.get("bond-core"), hasKey(VLAN_INTERFACE_PARENT));
+    assertThat(references.get("bond-core").get(VLAN_INTERFACE_PARENT), hasItem(4));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testWarningUndefinedBondingSlaveInline() {
+    String src = "/interface bonding add name=bond-bad slaves=ghost-slave mode=802.3ad\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    List<String> warningComments =
+        result._warnings.getParseWarnings().stream().map(w -> w.getComment()).toList();
+    assertThat(
+        warningComments,
+        hasItem(
+            containsString(
+                "Bonding interface bond-bad references undefined slave interface ghost-slave")));
+
+    Map<String, Map<org.batfish.vendor.StructureUsage, Multiset<Integer>>> references =
+        result._configuration.getStructureManager().getStructureReferences(INTERFACE);
+    assertThat(references, hasKey("ghost-slave"));
+    assertThat(references.get("ghost-slave"), hasKey(BONDING_SLAVE_INTERFACE));
+  }
+
+  @Test
+  public void testWarningUndefinedVlanParentInline() {
+    String src = "/interface vlan add interface=ghost-parent name=vlan999-missing vlan-id=999\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    List<String> warningComments =
+        result._warnings.getParseWarnings().stream().map(w -> w.getComment()).toList();
+    assertThat(
+        warningComments,
+        hasItem(
+            containsString(
+                "VLAN interface vlan999-missing references undefined parent interface ghost-parent")));
+
+    Map<String, Map<org.batfish.vendor.StructureUsage, Multiset<Integer>>> references =
+        result._configuration.getStructureManager().getStructureReferences(INTERFACE);
+    assertThat(references, hasKey("ghost-parent"));
+    assertThat(references.get("ghost-parent"), hasKey(VLAN_INTERFACE_PARENT));
+  }
+
+  @Test
+  public void testExtractorBondingVlanFixtureAssertsFullInterfaceSet() {
+    ExtractionResult result = parseAndExtract("mikrotik_bonding_vlan_vi");
+    Map<String, MikrotikInterface> interfaces = result._configuration.getMainVrf().getInterfaces();
+    assertThat(
+        interfaces.keySet(),
+        containsInAnyOrder(
+            "bridge-lan",
+            "ether1",
+            "ether2",
+            "ether3",
+            "ether4",
+            "ether5",
+            "ether6",
+            "ether7",
+            "ether8",
+            "bond-core",
+            "vlan10-users",
+            "vlan20-servers",
+            "vlan30-voice",
+            "vlan40-guest",
+            "vlan200-bond-wan"));
+
+    MikrotikInterface bondCore = interfaces.get("bond-core");
+    assertThat(bondCore, notNullValue());
+    assertThat(bondCore.getType(), equalTo("bonding"));
+    assertThat(bondCore.getSlaves(), contains("ether1", "ether2"));
+
+    MikrotikInterface vlan200 = interfaces.get("vlan200-bond-wan");
+    assertThat(vlan200, notNullValue());
+    assertThat(vlan200.getType(), equalTo("vlan"));
+    assertThat(vlan200.getVlanId(), equalTo(200));
+    assertThat(vlan200.getParentInterface(), equalTo("bond-core"));
+    assertThat(vlan200.getAddresses(), contains(ConcreteInterfaceAddress.parse("172.16.200.2/30")));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testViAndDataplaneBondingVlanFromFixture() throws Exception {
+    ExtractionResult result = parseAndExtract("mikrotik_bonding_vlan_vi");
+    Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
+
+    assertThat(viConfig.getAllInterfaces(), hasKey("bond-core"));
+    assertThat(viConfig.getAllInterfaces(), hasKey("vlan200-bond-wan"));
+
+    org.batfish.datamodel.Interface bondCore = viConfig.getAllInterfaces().get("bond-core");
+    org.batfish.datamodel.Interface vlan200 =
+        viConfig.getAllInterfaces().get("vlan200-bond-wan");
+    assertThat(
+        bondCore.getInterfaceType(), equalTo(org.batfish.datamodel.InterfaceType.AGGREGATED));
+    assertThat(bondCore.getChannelGroupMembers(), containsInAnyOrder("ether1", "ether2"));
+    assertThat(viConfig.getAllInterfaces().get("ether1").getChannelGroup(), equalTo("bond-core"));
+    assertThat(viConfig.getAllInterfaces().get("ether2").getChannelGroup(), equalTo("bond-core"));
+    assertThat(vlan200.getAddress(), equalTo(ConcreteInterfaceAddress.parse("172.16.200.2/30")));
+    assertThat(vlan200.getVlan(), equalTo((Integer) 200));
+
+    Batfish batfish =
+        BatfishTestUtils.getBatfishFromTestrigText(
+            TestrigText.builder()
+                .setConfigurationText(
+                    ImmutableMap.of(
+                        "mtik-bonding-vlan-vi",
+                        readResource(TESTCONFIGS_PREFIX + "mikrotik_bonding_vlan_vi", UTF_8)))
+                .build(),
+            _folder);
+    batfish.computeDataPlane(batfish.getSnapshot());
+    DataPlane dp = batfish.loadDataPlane(batfish.getSnapshot());
+    String hostname =
+        getOnlyElement(batfish.loadConfigurations(batfish.getSnapshot()).values()).getHostname();
+    Set<AbstractRoute> routes =
+        dp.getRibs().get(hostname, Configuration.DEFAULT_VRF_NAME).getRoutes();
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.CONNECTED
+                        && route.getNetwork().equals(Prefix.parse("172.16.200.0/30"))),
+        equalTo(true));
   }
 
   @Test

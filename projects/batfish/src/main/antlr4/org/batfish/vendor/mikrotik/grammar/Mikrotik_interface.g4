@@ -16,6 +16,23 @@ interface_bridge_add_prop
   | key_value_parameter
 ;
 
+interface_bonding_add
+:
+  BONDING ADD interface_bonding_add_prop*
+;
+
+interface_bonding_add_prop
+:
+  if_prop_name
+  | if_bonding_prop_slaves
+  | if_bonding_prop_mode
+  | if_bonding_prop_lacp_rate
+  | if_prop_disabled
+  | if_prop_mtu
+  | if_prop_comment
+  | key_value_parameter
+;
+
 interface_ethernet_set
 :
   ETHERNET SET bracket_expression? interface_ethernet_set_prop*
@@ -92,6 +109,21 @@ interface_vlan_add_prop
   | if_prop_mtu
   | if_prop_comment
   | key_value_parameter
+;
+
+if_bonding_prop_slaves
+:
+  SLAVES EQUALS parameter_value
+;
+
+if_bonding_prop_mode
+:
+  MODE EQUALS parameter_value
+;
+
+if_bonding_prop_lacp_rate
+:
+  LACP_RATE EQUALS parameter_value
 ;
 
 if_prop_name
