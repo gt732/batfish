@@ -1,15 +1,22 @@
 package org.batfish.vendor.mikrotik.representation;
 
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.nullValue;
 
+import com.google.common.collect.ImmutableMap;
+import java.util.ArrayList;
+import java.util.Map;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
+import org.batfish.datamodel.Configuration;
+import org.batfish.datamodel.ConfigurationFormat;
 import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.InterfaceType;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.StaticRoute;
+import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.route.nh.NextHopIp;
 import org.junit.Test;
 
@@ -115,5 +122,46 @@ public final class MikrotikConversionsTest {
     assertThat(sr2.getNextHop(), equalTo(sr3.getNextHop()));
     assertThat(sr1.getAdministrativeCost(), equalTo(sr2.getAdministrativeCost()));
     assertThat(sr2.getAdministrativeCost(), equalTo(sr3.getAdministrativeCost()));
+  }
+
+  @Test
+  public void testMaterializeViVrfsMapsMainAndPreservesOrder() {
+    MikrotikConfiguration vc = new MikrotikConfiguration();
+    vc.getOrCreateVrf("blue");
+    vc.getOrCreateVrf("green");
+
+    Map<String, Vrf> viVrfs = Conversions.materializeViVrfs(vc.getVrfs().values());
+
+    assertThat(
+        new ArrayList<>(viVrfs.keySet()),
+        contains(Configuration.DEFAULT_VRF_NAME, "blue", "green"));
+  }
+
+  @Test
+  public void testMaterializeVrfInterfacesAndStaticRoutes() {
+    MikrotikConfiguration vc = new MikrotikConfiguration();
+    MikrotikInterface mainIface = new MikrotikInterface("ether1", "ether");
+    mainIface.addAddress(ConcreteInterfaceAddress.parse("192.0.2.1/24"));
+    vc.getMainVrf().getInterfaces().put(mainIface.getName(), mainIface);
+    vc.getMainVrf()
+        .getStaticRoutes()
+        .add(new MikrotikStaticRoute(Prefix.parse("0.0.0.0/0"), Ip.parse("192.0.2.254"), 10));
+
+    MikrotikVrf blueVrf = vc.getOrCreateVrf("blue");
+    MikrotikInterface blueIface = new MikrotikInterface("vlan25", "vlan");
+    blueIface.setVlanId(25);
+    blueVrf.getInterfaces().put(blueIface.getName(), blueIface);
+
+    Configuration c = new Configuration("test", ConfigurationFormat.MIKROTIK);
+    c.setVrfs(ImmutableMap.copyOf(Conversions.materializeViVrfs(vc.getVrfs().values())));
+
+    Conversions.materializeVrfInterfacesAndStaticRoutes(c, vc.getVrfs().values());
+
+    assertThat(c.getAllInterfaces().get("ether1").getOwner(), equalTo(c));
+    assertThat(c.getAllInterfaces().get("ether1").getVrfName(), equalTo(Configuration.DEFAULT_VRF_NAME));
+    assertThat(c.getAllInterfaces().get("vlan25").getVrfName(), equalTo("blue"));
+    assertThat(
+        c.getVrfs().get(Configuration.DEFAULT_VRF_NAME).getStaticRoutes().first().getNetwork(),
+        equalTo(Prefix.ZERO));
   }
 }

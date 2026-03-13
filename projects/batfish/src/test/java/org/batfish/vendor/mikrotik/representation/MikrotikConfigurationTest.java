@@ -10,6 +10,7 @@ import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.sameInstance;
 
+import java.util.ArrayList;
 import java.util.List;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Configuration;
@@ -310,5 +311,23 @@ public final class MikrotikConfigurationTest {
 
     Interface viTrunk = getOnlyElement(vc.toVendorIndependentConfigurations()).getAllInterfaces().get("trunk1");
     assertThat(viTrunk.getNativeVlan(), equalTo(100));
+  }
+
+  @Test
+  public void testToVendorIndependentConfigurationsDeterministicVrfOrdering() {
+    MikrotikConfiguration vc = new MikrotikConfiguration();
+    vc.setHostname("test-mikrotik");
+    vc.getOrCreateVrf("blue");
+    vc.getOrCreateVrf("green");
+
+    Configuration c1 = getOnlyElement(vc.toVendorIndependentConfigurations());
+    Configuration c2 = getOnlyElement(vc.toVendorIndependentConfigurations());
+
+    assertThat(
+        new ArrayList<>(c1.getVrfs().keySet()),
+        equalTo(new ArrayList<>(c2.getVrfs().keySet())));
+    assertThat(
+        new ArrayList<>(c1.getVrfs().keySet()),
+        equalTo(List.of(Configuration.DEFAULT_VRF_NAME, "blue", "green")));
   }
 }
