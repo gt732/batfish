@@ -40,6 +40,11 @@ public final class Conversions {
         return InterfaceType.VLAN;
       case "bonding":
         return InterfaceType.AGGREGATED;
+      case "gre":
+      case "ipip":
+      case "eoip":
+      case "wireguard":
+        return InterfaceType.TUNNEL;
       case "ether":
       case "ethernet":
       case "bridge":

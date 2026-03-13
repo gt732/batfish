@@ -81,6 +81,30 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testLexerTokenizesTunnelKeywords() {
+    String input =
+        "/interface gre add name=gre0 local-address=1.2.3.4 remote-address=5.6.7.8 mtu=1476\n"
+            + "/interface ipip add name=ipip0 local-address=1.2.3.4 remote-address=5.6.7.9 mtu=1480\n"
+            + "/interface eoip add name=eoip0 local-address=1.2.3.4 remote-address=5.6.7.10"
+            + " tunnel-id=99 mtu=1458\n"
+            + "/interface wireguard add name=wg0 listen-port=51820 mtu=1420\n"
+            + "/interface wireguard peers add interface=wg0 allowed-address=10.0.0.2/32"
+            + " endpoint-address=198.51.100.2 endpoint-port=51820\n";
+    MikrotikLexer lexer = new MikrotikLexer(CharStreams.fromString(input));
+    List<Integer> tokenTypes = lexer.getAllTokens().stream().map(Token::getType).toList();
+
+    assertThat(tokenTypes, hasItem(MikrotikLexer.GRE));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.IPIP));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.EOIP));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.WIREGUARD));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.PEERS));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.LOCAL_ADDRESS));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.REMOTE_ADDRESS));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.TUNNEL_ID));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.LISTEN_PORT));
+  }
+
+  @Test
   public void testParserParsesReferenceFixture() {
     String src = readResource(TESTCONFIGS_PREFIX + "mikrotik_interfaces_and_routes.export", UTF_8);
     Settings settings = new Settings();
@@ -108,6 +132,44 @@ public class MikrotikGrammarTest {
     assertThat(tree.toStringTree(parser.getParser()), containsString("if_bonding_prop_mode"));
     assertThat(tree.toStringTree(parser.getParser()), containsString("if_bonding_prop_lacp_rate"));
     assertThat(tree.toStringTree(parser.getParser()), containsString("if_bonding_prop_slaves"));
+  }
+
+  @Test
+  public void testParserParsesInlineTunnelCommands() {
+    String src =
+        "/interface gre add name=gre0 local-address=1.2.3.4 remote-address=5.6.7.8 mtu=1476\n"
+            + "/interface ipip add name=ipip0 local-address=1.2.3.4 remote-address=5.6.7.9"
+            + " mtu=1480\n"
+            + "/interface eoip add name=eoip0 local-address=1.2.3.4 remote-address=5.6.7.10"
+            + " tunnel-id=99 mtu=1458\n"
+            + "/interface wireguard add name=wg0 listen-port=51820 mtu=1420\n";
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    assertThat(tree, notNullValue());
+    assertThat(tree.toStringTree(parser.getParser()), containsString("interface_gre_add"));
+    assertThat(tree.toStringTree(parser.getParser()), containsString("interface_ipip_add"));
+    assertThat(tree.toStringTree(parser.getParser()), containsString("interface_eoip_add"));
+    assertThat(tree.toStringTree(parser.getParser()), containsString("interface_wireguard_add"));
+  }
+
+  @Test
+  public void testParserParsesWireguardPeersWithoutGenericCommand() {
+    String src =
+        "/interface wireguard peers add interface=wg0 allowed-address=10.0.0.2/32"
+            + " endpoint-address=198.51.100.2 endpoint-port=51820\n";
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    String treeText = tree.toStringTree(parser.getParser());
+    assertThat(treeText, containsString("wireguard"));
+    assertThat(treeText.contains("generic_command"), equalTo(false));
   }
 
   @Test
@@ -291,6 +353,104 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testExtractorTunnelGreInline() {
+    String src =
+        "/interface gre add name=gre0 local-address=1.2.3.4 remote-address=5.6.7.8 mtu=1476\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface gre0 = result._configuration.getMainVrf().getInterfaces().get("gre0");
+    assertThat(gre0, notNullValue());
+    assertThat(gre0.getType(), equalTo("gre"));
+    assertThat(gre0.getLocalAddress(), equalTo(Ip.parse("1.2.3.4")));
+    assertThat(gre0.getRemoteAddress(), equalTo(Ip.parse("5.6.7.8")));
+    assertThat(gre0.getMtu(), equalTo(1476));
+  }
+
+  @Test
+  public void testExtractorTunnelIpipInline() {
+    String src =
+        "/interface ipip add name=ipip0 local-address=1.2.3.4 remote-address=5.6.7.9 mtu=1480\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface ipip0 = result._configuration.getMainVrf().getInterfaces().get("ipip0");
+    assertThat(ipip0, notNullValue());
+    assertThat(ipip0.getType(), equalTo("ipip"));
+    assertThat(ipip0.getLocalAddress(), equalTo(Ip.parse("1.2.3.4")));
+    assertThat(ipip0.getRemoteAddress(), equalTo(Ip.parse("5.6.7.9")));
+    assertThat(ipip0.getMtu(), equalTo(1480));
+  }
+
+  @Test
+  public void testExtractorTunnelEoipInline() {
+    String src =
+        "/interface eoip add name=eoip0 local-address=1.2.3.4 remote-address=5.6.7.10"
+            + " tunnel-id=99 mtu=1458\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface eoip0 = result._configuration.getMainVrf().getInterfaces().get("eoip0");
+    assertThat(eoip0, notNullValue());
+    assertThat(eoip0.getType(), equalTo("eoip"));
+    assertThat(eoip0.getLocalAddress(), equalTo(Ip.parse("1.2.3.4")));
+    assertThat(eoip0.getRemoteAddress(), equalTo(Ip.parse("5.6.7.10")));
+    assertThat(eoip0.getTunnelId(), equalTo(99));
+    assertThat(eoip0.getMtu(), equalTo(1458));
+  }
+
+  @Test
+  public void testExtractorTunnelWireguardInline() {
+    String src = "/interface wireguard add name=wg0 listen-port=51820 mtu=1420\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface wg0 = result._configuration.getMainVrf().getInterfaces().get("wg0");
+    assertThat(wg0, notNullValue());
+    assertThat(wg0.getType(), equalTo("wireguard"));
+    assertThat(wg0.getListenPort(), equalTo(51820));
+    assertThat(wg0.getMtu(), equalTo(1420));
+    assertThat(wg0.getLocalAddress(), equalTo((Ip) null));
+    assertThat(wg0.getRemoteAddress(), equalTo((Ip) null));
+  }
+
+  @Test
+  public void testExtractorTunnelInvalidAddressWarningInline() {
+    String src =
+        "/interface gre add name=gre0 local-address=not-an-ip remote-address=5.6.7.8 mtu=1476\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("Invalid local-address 'not-an-ip' for tunnel interface gre0"));
+  }
+
+  @Test
+  public void testExtractorTunnelInvalidTunnelIdWarningInline() {
+    String src =
+        "/interface eoip add name=eoip0 local-address=1.2.3.4 remote-address=5.6.7.10"
+            + " tunnel-id=notanumber mtu=1458\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("Invalid tunnel-id 'notanumber' for tunnel interface eoip0"));
+  }
+
+  @Test
+  public void testExtractorTunnelUnsupportedParamsFallThroughInline() {
+    String src =
+        "/interface gre add name=gre-unsupported local-address=192.0.2.2 remote-address=192.0.2.10"
+            + " dscp=inherit clamp-tcp-mss=yes ipsec-secret=\"x\"\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface iface =
+        result._configuration.getMainVrf().getInterfaces().get("gre-unsupported");
+    assertThat(iface, notNullValue());
+    assertThat(iface.getType(), equalTo("gre"));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+    assertThat(result._warnings.getRedFlagWarnings(), hasSize(0));
+  }
+
+  @Test
   public void testWarningUndefinedBondingSlaveInline() {
     String src = "/interface bonding add name=bond-bad slaves=ghost-slave mode=802.3ad\n";
     ExtractionResult result = parseAndExtractFromString(src);
@@ -366,6 +526,63 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testExtractorTunnelFixtureAssertsFullInterfaceSet() {
+    ExtractionResult result = parseAndExtract("mikrotik_tunnel_interfaces");
+    Map<String, MikrotikInterface> interfaces = result._configuration.getMainVrf().getInterfaces();
+    assertThat(
+        interfaces.keySet(),
+        containsInAnyOrder(
+            "ether1",
+            "ether2",
+            "ether3",
+            "ether4",
+            "ether5",
+            "ether6",
+            "ether7",
+            "ether8",
+            "gre-core",
+            "ipip-backhaul",
+            "eoip-l2",
+            "wg-overlay",
+            "gre-unsupported",
+            "ipip-unsupported",
+            "eoip-unsupported",
+            "wg-unsupported"));
+
+    MikrotikInterface greCore = interfaces.get("gre-core");
+    assertThat(greCore, notNullValue());
+    assertThat(greCore.getType(), equalTo("gre"));
+    assertThat(greCore.getLocalAddress(), equalTo(Ip.parse("192.0.2.2")));
+    assertThat(greCore.getRemoteAddress(), equalTo(Ip.parse("192.0.2.1")));
+    assertThat(greCore.getAddresses(), contains(ConcreteInterfaceAddress.parse("10.0.0.2/30")));
+
+    MikrotikInterface ipipBackhaul = interfaces.get("ipip-backhaul");
+    assertThat(ipipBackhaul, notNullValue());
+    assertThat(ipipBackhaul.getType(), equalTo("ipip"));
+    assertThat(ipipBackhaul.getLocalAddress(), equalTo(Ip.parse("192.0.2.2")));
+    assertThat(ipipBackhaul.getRemoteAddress(), equalTo(Ip.parse("192.0.2.5")));
+    assertThat(
+        ipipBackhaul.getAddresses(), contains(ConcreteInterfaceAddress.parse("10.0.1.2/30")));
+
+    MikrotikInterface eoipL2 = interfaces.get("eoip-l2");
+    assertThat(eoipL2, notNullValue());
+    assertThat(eoipL2.getType(), equalTo("eoip"));
+    assertThat(eoipL2.getLocalAddress(), equalTo(Ip.parse("192.0.2.2")));
+    assertThat(eoipL2.getRemoteAddress(), equalTo(Ip.parse("192.0.2.9")));
+    assertThat(eoipL2.getTunnelId(), equalTo(200));
+
+    MikrotikInterface wgOverlay = interfaces.get("wg-overlay");
+    assertThat(wgOverlay, notNullValue());
+    assertThat(wgOverlay.getType(), equalTo("wireguard"));
+    assertThat(wgOverlay.getListenPort(), equalTo(51820));
+    assertThat(
+        wgOverlay.getAddresses(), contains(ConcreteInterfaceAddress.parse("10.255.255.1/24")));
+
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+    assertThat(result._warnings.getRedFlagWarnings(), hasSize(0));
+  }
+
+  @Test
   public void testViAndDataplaneBondingVlanFromFixture() throws Exception {
     ExtractionResult result = parseAndExtract("mikrotik_bonding_vlan_vi");
     Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
@@ -405,6 +622,66 @@ public class MikrotikGrammarTest {
                 route ->
                     route.getProtocol() == RoutingProtocol.CONNECTED
                         && route.getNetwork().equals(Prefix.parse("172.16.200.0/30"))),
+        equalTo(true));
+  }
+
+  @Test
+  public void testViAndDataplaneTunnelFromFixture() throws Exception {
+    ExtractionResult result = parseAndExtract("mikrotik_tunnel_interfaces");
+    Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
+
+    assertThat(viConfig.getAllInterfaces(), hasKey("gre-core"));
+    assertThat(viConfig.getAllInterfaces(), hasKey("ipip-backhaul"));
+    assertThat(viConfig.getAllInterfaces(), hasKey("eoip-l2"));
+    assertThat(viConfig.getAllInterfaces(), hasKey("wg-overlay"));
+
+    org.batfish.datamodel.Interface greCore = viConfig.getAllInterfaces().get("gre-core");
+    org.batfish.datamodel.Interface ipipBackhaul = viConfig.getAllInterfaces().get("ipip-backhaul");
+    org.batfish.datamodel.Interface eoipL2 = viConfig.getAllInterfaces().get("eoip-l2");
+    org.batfish.datamodel.Interface wgOverlay = viConfig.getAllInterfaces().get("wg-overlay");
+    assertThat(greCore.getInterfaceType(), equalTo(org.batfish.datamodel.InterfaceType.TUNNEL));
+    assertThat(ipipBackhaul.getInterfaceType(), equalTo(org.batfish.datamodel.InterfaceType.TUNNEL));
+    assertThat(eoipL2.getInterfaceType(), equalTo(org.batfish.datamodel.InterfaceType.TUNNEL));
+    assertThat(wgOverlay.getInterfaceType(), equalTo(org.batfish.datamodel.InterfaceType.TUNNEL));
+    assertThat(greCore.getAddress(), equalTo(ConcreteInterfaceAddress.parse("10.0.0.2/30")));
+    assertThat(ipipBackhaul.getAddress(), equalTo(ConcreteInterfaceAddress.parse("10.0.1.2/30")));
+    assertThat(wgOverlay.getAddress(), equalTo(ConcreteInterfaceAddress.parse("10.255.255.1/24")));
+
+    Batfish batfish =
+        BatfishTestUtils.getBatfishFromTestrigText(
+            TestrigText.builder()
+                .setConfigurationText(
+                    ImmutableMap.of(
+                        "mtik-tunnel-vi",
+                        readResource(TESTCONFIGS_PREFIX + "mikrotik_tunnel_interfaces", UTF_8)))
+                .build(),
+            _folder);
+    batfish.computeDataPlane(batfish.getSnapshot());
+    DataPlane dp = batfish.loadDataPlane(batfish.getSnapshot());
+    String hostname =
+        getOnlyElement(batfish.loadConfigurations(batfish.getSnapshot()).values()).getHostname();
+    Set<AbstractRoute> routes =
+        dp.getRibs().get(hostname, Configuration.DEFAULT_VRF_NAME).getRoutes();
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.CONNECTED
+                        && route.getNetwork().equals(Prefix.parse("10.0.0.0/30"))),
+        equalTo(true));
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.CONNECTED
+                        && route.getNetwork().equals(Prefix.parse("10.0.1.0/30"))),
+        equalTo(true));
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.CONNECTED
+                        && route.getNetwork().equals(Prefix.parse("10.255.255.0/24"))),
         equalTo(true));
   }
 

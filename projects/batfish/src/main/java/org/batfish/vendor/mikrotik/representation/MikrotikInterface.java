@@ -7,6 +7,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
+import org.batfish.datamodel.Ip;
 
 /** Vendor-specific interface representation for MikroTik RouterOS. */
 @ParametersAreNonnullByDefault
@@ -95,6 +96,38 @@ public final class MikrotikInterface implements Serializable {
     _lacpRate = lacpRate;
   }
 
+  public @Nullable Ip getLocalAddress() {
+    return _localAddress;
+  }
+
+  public void setLocalAddress(@Nullable Ip localAddress) {
+    _localAddress = localAddress;
+  }
+
+  public @Nullable Ip getRemoteAddress() {
+    return _remoteAddress;
+  }
+
+  public void setRemoteAddress(@Nullable Ip remoteAddress) {
+    _remoteAddress = remoteAddress;
+  }
+
+  public @Nullable Integer getTunnelId() {
+    return _tunnelId;
+  }
+
+  public void setTunnelId(@Nullable Integer tunnelId) {
+    _tunnelId = tunnelId;
+  }
+
+  public @Nullable Integer getListenPort() {
+    return _listenPort;
+  }
+
+  public void setListenPort(@Nullable Integer listenPort) {
+    _listenPort = listenPort;
+  }
+
   private final @Nonnull String _name;
   private @Nonnull String _type;
   private @Nullable Integer _mtu;
@@ -105,4 +138,8 @@ public final class MikrotikInterface implements Serializable {
   private final @Nonnull List<String> _slaves;
   private @Nullable String _bondingMode;
   private @Nullable String _lacpRate;
+  private @Nullable Ip _localAddress;
+  private @Nullable Ip _remoteAddress;
+  private @Nullable Integer _tunnelId;
+  private @Nullable Integer _listenPort;
 }

@@ -41,6 +41,11 @@ interface_type_command
   | interface_bridge_vlan_add
   | interface_ethernet_set
   | interface_vlan_add
+  | interface_gre_add
+  | interface_ipip_add
+  | interface_eoip_add
+  | interface_wireguard_add
+  | WIREGUARD PEERS command_tail?
   | WIRELESS SECURITY_PROFILES command_tail?
   | command_tail?
 ;

@@ -79,6 +79,31 @@ VLAN
   'vlan'
 ;
 
+GRE
+:
+  'gre'
+;
+
+IPIP
+:
+  'ipip'
+;
+
+EOIP
+:
+  'eoip'
+;
+
+WIREGUARD
+:
+  'wireguard'
+;
+
+PEERS
+:
+  'peers'
+;
+
 VLAN_ID
 :
   'vlan-id'
@@ -257,6 +282,26 @@ DISTANCE
 MTU
 :
   'mtu'
+;
+
+LOCAL_ADDRESS
+:
+  'local-address'
+;
+
+REMOTE_ADDRESS
+:
+  'remote-address'
+;
+
+TUNNEL_ID
+:
+  'tunnel-id'
+;
+
+LISTEN_PORT
+:
+  'listen-port'
 ;
 
 PVID

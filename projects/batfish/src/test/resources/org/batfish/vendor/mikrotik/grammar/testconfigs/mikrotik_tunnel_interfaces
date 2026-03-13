@@ -1,0 +1,30 @@
+# mar/13/2026 20:22:29 by RouterOS 6.49.17
+# software id =
+#
+#
+#
+/interface ethernet set [ find default-name=ether1 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether2 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether3 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether4 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether5 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether6 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether7 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether8 ] disable-running-check=no
+/interface eoip add local-address=192.0.2.2 mac-address=FE:A4:54:40:3E:F3 mtu=1458 name=eoip-l2 remote-address=192.0.2.9 tunnel-id=200
+/interface gre add local-address=192.0.2.2 mtu=1476 name=gre-core remote-address=192.0.2.1
+/interface ipip add local-address=192.0.2.2 mtu=1480 name=ipip-backhaul remote-address=192.0.2.5
+/interface wireguard add name=wg-overlay listen-port=51820 mtu=1420 private-key="TEST_PRIVATE_KEY_REPLACE_ME=="
+/interface wireguard peers add interface=wg-overlay public-key="TEST_PUBLIC_KEY_REPLACE_ME==" allowed-address=10.255.255.2/32 endpoint-address=198.51.100.2 endpoint-port=51820 persistent-keepalive=25s
+/interface gre add name=gre-unsupported local-address=192.0.2.2 remote-address=192.0.2.10 dscp=inherit clamp-tcp-mss=yes allow-fast-path=no ipsec-secret="ignore-me"
+/interface ipip add name=ipip-unsupported local-address=192.0.2.2 remote-address=192.0.2.11 dscp=inherit clamp-tcp-mss=yes allow-fast-path=no ipsec-secret="ignore-me"
+/interface eoip add name=eoip-unsupported local-address=192.0.2.2 remote-address=192.0.2.12 tunnel-id=201 mac-address=02:00:00:00:00:01 arp=proxy-arp allow-fast-path=no
+/interface wireguard add name=wg-unsupported listen-port=51821 mtu=1420 private-key="TEST_PRIVATE_KEY_REPLACE_ME==" comment="unsupported knobs fixture"
+/ip address add address=192.0.2.2/30 interface=ether1 network=192.0.2.0
+/ip address add address=10.0.0.2/30 interface=gre-core network=10.0.0.0
+/ip address add address=10.0.1.2/30 interface=ipip-backhaul network=10.0.1.0
+/ip address add address=10.255.255.1/24 interface=wg-overlay network=10.255.255.0
+/ip route add distance=1 dst-address=203.0.113.0/24 gateway=10.0.0.1
+/ip route add distance=1 dst-address=203.0.114.0/24 gateway=10.0.1.1
+/ip route add dst-address=10.255.254.0/24 gateway=10.255.255.2
+/system identity set name=mt-story52-lab

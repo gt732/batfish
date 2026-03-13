@@ -284,6 +284,243 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
   }
 
   @Override
+  public void enterInterface_gre_add(MikrotikParser.Interface_gre_addContext ctx) {
+    Optional<String> maybeName =
+        ctx.interface_gre_add_prop().stream()
+            .filter(prop -> prop.if_prop_name() != null)
+            .map(prop -> extractParameterValue(prop.if_prop_name().parameter_value()))
+            .findFirst();
+    if (maybeName.isEmpty()) {
+      return;
+    }
+    String name = maybeName.get();
+    MikrotikInterface iface = getOrCreateInterface(name, "gre");
+    iface.setType("gre");
+    for (MikrotikParser.Interface_gre_add_propContext prop : ctx.interface_gre_add_prop()) {
+      if (prop.if_tunnel_prop_local_address() != null) {
+        String rawLocalAddress =
+            extractParameterValue(prop.if_tunnel_prop_local_address().parameter_value());
+        try {
+          iface.setLocalAddress(Ip.parse(rawLocalAddress));
+        } catch (IllegalArgumentException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format(
+                  "Invalid local-address '%s' for tunnel interface %s", rawLocalAddress, name));
+        }
+      } else if (prop.if_tunnel_prop_remote_address() != null) {
+        String rawRemoteAddress =
+            extractParameterValue(prop.if_tunnel_prop_remote_address().parameter_value());
+        try {
+          iface.setRemoteAddress(Ip.parse(rawRemoteAddress));
+        } catch (IllegalArgumentException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format(
+                  "Invalid remote-address '%s' for tunnel interface %s", rawRemoteAddress, name));
+        }
+      } else if (prop.if_prop_disabled() != null) {
+        iface.setDisabled(parseBoolean(extractParameterValue(prop.if_prop_disabled().parameter_value())));
+      } else if (prop.if_prop_mtu() != null) {
+        String rawMtu = extractParameterValue(prop.if_prop_mtu().parameter_value());
+        try {
+          iface.setMtu(Integer.parseInt(rawMtu));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
+        }
+      }
+    }
+    _configuration.defineStructure(INTERFACE, name, ctx);
+    _configuration.referenceStructure(
+        INTERFACE, name, INTERFACE_SELF_REFERENCE, ctx.getStart().getLine());
+  }
+
+  @Override
+  public void enterInterface_ipip_add(MikrotikParser.Interface_ipip_addContext ctx) {
+    Optional<String> maybeName =
+        ctx.interface_ipip_add_prop().stream()
+            .filter(prop -> prop.if_prop_name() != null)
+            .map(prop -> extractParameterValue(prop.if_prop_name().parameter_value()))
+            .findFirst();
+    if (maybeName.isEmpty()) {
+      return;
+    }
+    String name = maybeName.get();
+    MikrotikInterface iface = getOrCreateInterface(name, "ipip");
+    iface.setType("ipip");
+    for (MikrotikParser.Interface_ipip_add_propContext prop : ctx.interface_ipip_add_prop()) {
+      if (prop.if_tunnel_prop_local_address() != null) {
+        String rawLocalAddress =
+            extractParameterValue(prop.if_tunnel_prop_local_address().parameter_value());
+        try {
+          iface.setLocalAddress(Ip.parse(rawLocalAddress));
+        } catch (IllegalArgumentException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format(
+                  "Invalid local-address '%s' for tunnel interface %s", rawLocalAddress, name));
+        }
+      } else if (prop.if_tunnel_prop_remote_address() != null) {
+        String rawRemoteAddress =
+            extractParameterValue(prop.if_tunnel_prop_remote_address().parameter_value());
+        try {
+          iface.setRemoteAddress(Ip.parse(rawRemoteAddress));
+        } catch (IllegalArgumentException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format(
+                  "Invalid remote-address '%s' for tunnel interface %s", rawRemoteAddress, name));
+        }
+      } else if (prop.if_prop_disabled() != null) {
+        iface.setDisabled(parseBoolean(extractParameterValue(prop.if_prop_disabled().parameter_value())));
+      } else if (prop.if_prop_mtu() != null) {
+        String rawMtu = extractParameterValue(prop.if_prop_mtu().parameter_value());
+        try {
+          iface.setMtu(Integer.parseInt(rawMtu));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
+        }
+      }
+    }
+    _configuration.defineStructure(INTERFACE, name, ctx);
+    _configuration.referenceStructure(
+        INTERFACE, name, INTERFACE_SELF_REFERENCE, ctx.getStart().getLine());
+  }
+
+  @Override
+  public void enterInterface_eoip_add(MikrotikParser.Interface_eoip_addContext ctx) {
+    Optional<String> maybeName =
+        ctx.interface_eoip_add_prop().stream()
+            .filter(prop -> prop.if_prop_name() != null)
+            .map(prop -> extractParameterValue(prop.if_prop_name().parameter_value()))
+            .findFirst();
+    if (maybeName.isEmpty()) {
+      return;
+    }
+    String name = maybeName.get();
+    MikrotikInterface iface = getOrCreateInterface(name, "eoip");
+    iface.setType("eoip");
+    for (MikrotikParser.Interface_eoip_add_propContext prop : ctx.interface_eoip_add_prop()) {
+      if (prop.if_tunnel_prop_local_address() != null) {
+        String rawLocalAddress =
+            extractParameterValue(prop.if_tunnel_prop_local_address().parameter_value());
+        try {
+          iface.setLocalAddress(Ip.parse(rawLocalAddress));
+        } catch (IllegalArgumentException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format(
+                  "Invalid local-address '%s' for tunnel interface %s", rawLocalAddress, name));
+        }
+      } else if (prop.if_tunnel_prop_remote_address() != null) {
+        String rawRemoteAddress =
+            extractParameterValue(prop.if_tunnel_prop_remote_address().parameter_value());
+        try {
+          iface.setRemoteAddress(Ip.parse(rawRemoteAddress));
+        } catch (IllegalArgumentException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format(
+                  "Invalid remote-address '%s' for tunnel interface %s", rawRemoteAddress, name));
+        }
+      } else if (prop.if_eoip_prop_tunnel_id() != null) {
+        String rawTunnelId = extractParameterValue(prop.if_eoip_prop_tunnel_id().parameter_value());
+        try {
+          iface.setTunnelId(Integer.parseInt(rawTunnelId));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid tunnel-id '%s' for tunnel interface %s", rawTunnelId, name));
+        }
+      } else if (prop.if_prop_disabled() != null) {
+        iface.setDisabled(parseBoolean(extractParameterValue(prop.if_prop_disabled().parameter_value())));
+      } else if (prop.if_prop_mtu() != null) {
+        String rawMtu = extractParameterValue(prop.if_prop_mtu().parameter_value());
+        try {
+          iface.setMtu(Integer.parseInt(rawMtu));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
+        }
+      }
+    }
+    _configuration.defineStructure(INTERFACE, name, ctx);
+    _configuration.referenceStructure(
+        INTERFACE, name, INTERFACE_SELF_REFERENCE, ctx.getStart().getLine());
+  }
+
+  @Override
+  public void enterInterface_wireguard_add(MikrotikParser.Interface_wireguard_addContext ctx) {
+    Optional<String> maybeName =
+        ctx.interface_wireguard_add_prop().stream()
+            .filter(prop -> prop.if_prop_name() != null)
+            .map(prop -> extractParameterValue(prop.if_prop_name().parameter_value()))
+            .findFirst();
+    if (maybeName.isEmpty()) {
+      return;
+    }
+    String name = maybeName.get();
+    MikrotikInterface iface = getOrCreateInterface(name, "wireguard");
+    iface.setType("wireguard");
+    for (MikrotikParser.Interface_wireguard_add_propContext prop : ctx.interface_wireguard_add_prop()) {
+      if (prop.if_wireguard_prop_listen_port() != null) {
+        String rawListenPort =
+            extractParameterValue(prop.if_wireguard_prop_listen_port().parameter_value());
+        try {
+          iface.setListenPort(Integer.parseInt(rawListenPort));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid listen-port '%s' for tunnel interface %s", rawListenPort, name));
+        }
+      } else if (prop.if_prop_disabled() != null) {
+        iface.setDisabled(parseBoolean(extractParameterValue(prop.if_prop_disabled().parameter_value())));
+      } else if (prop.if_prop_mtu() != null) {
+        String rawMtu = extractParameterValue(prop.if_prop_mtu().parameter_value());
+        try {
+          iface.setMtu(Integer.parseInt(rawMtu));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
+        }
+      }
+    }
+    _configuration.defineStructure(INTERFACE, name, ctx);
+    _configuration.referenceStructure(
+        INTERFACE, name, INTERFACE_SELF_REFERENCE, ctx.getStart().getLine());
+  }
+
+  @Override
   public void enterInterface_bridge_port_add(MikrotikParser.Interface_bridge_port_addContext ctx) {
     Optional<String> maybeBridge =
         ctx.interface_bridge_port_add_prop().stream()

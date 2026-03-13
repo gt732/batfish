@@ -75,6 +75,20 @@ public final class MikrotikConversionsTest {
   }
 
   @Test
+  public void testToViInterfaceTunnelTypes() {
+    MikrotikInterface gre = new MikrotikInterface("gre0", "gre");
+    MikrotikInterface ipip = new MikrotikInterface("ipip0", "ipip");
+    MikrotikInterface eoip = new MikrotikInterface("eoip0", "eoip");
+    MikrotikInterface wireguard = new MikrotikInterface("wg0", "wireguard");
+
+    assertThat(Conversions.toViInterface(gre).getInterfaceType(), equalTo(InterfaceType.TUNNEL));
+    assertThat(Conversions.toViInterface(ipip).getInterfaceType(), equalTo(InterfaceType.TUNNEL));
+    assertThat(Conversions.toViInterface(eoip).getInterfaceType(), equalTo(InterfaceType.TUNNEL));
+    assertThat(
+        Conversions.toViInterface(wireguard).getInterfaceType(), equalTo(InterfaceType.TUNNEL));
+  }
+
+  @Test
   public void testToViInterfaceVlanOverBondingBindDependency() {
     MikrotikInterface iface = new MikrotikInterface("vlan200-bond-wan", "vlan");
     iface.setVlanId(200);
