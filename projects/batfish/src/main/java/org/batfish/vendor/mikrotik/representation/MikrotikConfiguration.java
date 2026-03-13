@@ -6,7 +6,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -25,17 +25,18 @@ import org.batfish.vendor.VendorConfiguration;
 @ParametersAreNonnullByDefault
 public class MikrotikConfiguration extends VendorConfiguration {
 
+  public static final @Nonnull String MAIN_VRF_NAME = "main";
+
   private @Nullable String _hostname;
-  private final @Nonnull Map<String, MikrotikInterface> _interfaces;
-  private final @Nonnull List<MikrotikStaticRoute> _staticRoutes;
+  private final @Nonnull Map<String, MikrotikVrf> _vrfs;
   private final @Nonnull List<MikrotikBridgePort> _bridgePorts;
   private final @Nonnull List<MikrotikBridgeVlan> _bridgeVlans;
 
   public MikrotikConfiguration() {
-    _interfaces = new HashMap<>();
-    _staticRoutes = new ArrayList<>();
+    _vrfs = new LinkedHashMap<>();
     _bridgePorts = new ArrayList<>();
     _bridgeVlans = new ArrayList<>();
+    getOrCreateVrf(MAIN_VRF_NAME);
   }
 
   @Override
@@ -53,12 +54,23 @@ public class MikrotikConfiguration extends VendorConfiguration {
     // ignored; format is always MIKROTIK
   }
 
-  public @Nonnull Map<String, MikrotikInterface> getInterfaces() {
-    return _interfaces;
+  public @Nonnull Map<String, MikrotikVrf> getVrfs() {
+    return _vrfs;
   }
 
-  public @Nonnull List<MikrotikStaticRoute> getStaticRoutes() {
-    return _staticRoutes;
+  public @Nonnull MikrotikVrf getMainVrf() {
+    return _vrfs.get(MAIN_VRF_NAME);
+  }
+
+  public @Nonnull MikrotikVrf getOrCreateVrf(String vrfName) {
+    return _vrfs.computeIfAbsent(vrfName, MikrotikVrf::new);
+  }
+
+  public @Nonnull MikrotikVrf getVrfOrMain(@Nullable String vrfName) {
+    if (vrfName == null) {
+      return getMainVrf();
+    }
+    return firstNonNull(_vrfs.get(vrfName), getMainVrf());
   }
 
   public @Nonnull List<MikrotikBridgePort> getBridgePorts() {
@@ -81,22 +93,44 @@ public class MikrotikConfiguration extends VendorConfiguration {
     c.setDefaultInboundAction(LineAction.PERMIT);
     c.setDefaultCrossZoneAction(LineAction.PERMIT);
 
-    Vrf vrf = new Vrf(Configuration.DEFAULT_VRF_NAME);
-    c.setVrfs(ImmutableMap.of(Configuration.DEFAULT_VRF_NAME, vrf));
-
-    _interfaces.values()
+    Map<String, Vrf> viVrfs = new LinkedHashMap<>();
+    _vrfs.values()
         .forEach(
-            iface -> {
-              Interface viIface = Conversions.toViInterface(iface);
-              viIface.setOwner(c);
-              viIface.setVrf(vrf);
-              c.getAllInterfaces().put(viIface.getName(), viIface);
+            mikrotikVrf -> {
+              String vrfName =
+                  mikrotikVrf.getName().equals(MAIN_VRF_NAME)
+                      ? Configuration.DEFAULT_VRF_NAME
+                      : mikrotikVrf.getName();
+              viVrfs.put(vrfName, new Vrf(vrfName));
             });
-    for (MikrotikStaticRoute sr : _staticRoutes) {
-      vrf.getStaticRoutes().add(Conversions.toViStaticRoute(sr));
-    }
+    c.setVrfs(ImmutableMap.copyOf(viVrfs));
+
+    _vrfs.values()
+        .forEach(
+            mikrotikVrf -> {
+              String vrfName =
+                  mikrotikVrf.getName().equals(MAIN_VRF_NAME)
+                      ? Configuration.DEFAULT_VRF_NAME
+                      : mikrotikVrf.getName();
+              Vrf viVrf = c.getVrfs().get(vrfName);
+              mikrotikVrf
+                  .getInterfaces()
+                  .values()
+                  .forEach(
+                      iface -> {
+                        Interface viIface = Conversions.toViInterface(iface);
+                        viIface.setOwner(c);
+                        viIface.setVrf(viVrf);
+                        c.getAllInterfaces().put(viIface.getName(), viIface);
+                      });
+              mikrotikVrf
+                  .getStaticRoutes()
+                  .forEach(sr -> viVrf.getStaticRoutes().add(Conversions.toViStaticRoute(sr)));
+            });
+
     Set<String> bridgeNames =
-        _interfaces.values().stream()
+        _vrfs.values().stream()
+            .flatMap(vrf -> vrf.getInterfaces().values().stream())
             .filter(iface -> iface.getType().equalsIgnoreCase("bridge"))
             .map(MikrotikInterface::getName)
             .collect(ImmutableSet.toImmutableSet());

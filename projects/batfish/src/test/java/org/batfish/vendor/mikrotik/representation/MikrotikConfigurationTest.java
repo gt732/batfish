@@ -4,9 +4,11 @@ import static com.google.common.collect.Iterables.getOnlyElement;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasEntry;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.sameInstance;
 
 import java.util.List;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
@@ -27,13 +29,33 @@ import org.junit.Test;
 public final class MikrotikConfigurationTest {
 
   @Test
+  public void testMainVrfBootstrappedByDefault() {
+    MikrotikConfiguration vc = new MikrotikConfiguration();
+
+    MikrotikVrf mainVrf = vc.getMainVrf();
+    assertThat(mainVrf.getName(), equalTo(MikrotikConfiguration.MAIN_VRF_NAME));
+    assertThat(vc.getVrfs(), hasEntry(MikrotikConfiguration.MAIN_VRF_NAME, mainVrf));
+  }
+
+  @Test
+  public void testGetVrfOrMainFallsBackToMain() {
+    MikrotikConfiguration vc = new MikrotikConfiguration();
+    MikrotikVrf mainVrf = vc.getMainVrf();
+    MikrotikVrf blueVrf = vc.getOrCreateVrf("blue");
+
+    assertThat(vc.getVrfOrMain(null), sameInstance(mainVrf));
+    assertThat(vc.getVrfOrMain("missing"), sameInstance(mainVrf));
+    assertThat(vc.getVrfOrMain("blue"), sameInstance(blueVrf));
+  }
+
+  @Test
   public void testToVendorIndependentConfigurations() {
     MikrotikConfiguration vc = new MikrotikConfiguration();
     vc.setHostname("test-mikrotik");
     MikrotikInterface iface = new MikrotikInterface("ether1", "ether");
     ConcreteInterfaceAddress address = ConcreteInterfaceAddress.parse("10.0.0.1/24");
     iface.addAddress(address);
-    vc.getInterfaces().put(iface.getName(), iface);
+    vc.getMainVrf().getInterfaces().put(iface.getName(), iface);
 
     List<Configuration> configs = vc.toVendorIndependentConfigurations();
 
@@ -80,8 +102,8 @@ public final class MikrotikConfigurationTest {
     vc.setHostname("test-mikrotik");
     MikrotikInterface iface = new MikrotikInterface("ether1", "ether");
     iface.addAddress(ConcreteInterfaceAddress.parse("10.0.0.1/24"));
-    vc.getInterfaces().put(iface.getName(), iface);
-    vc.getStaticRoutes()
+    vc.getMainVrf().getInterfaces().put(iface.getName(), iface);
+    vc.getMainVrf().getStaticRoutes()
         .add(new MikrotikStaticRoute(Prefix.parse("0.0.0.0/0"), Ip.parse("10.0.0.254"), 1));
 
     List<Configuration> configs = vc.toVendorIndependentConfigurations();
@@ -102,7 +124,7 @@ public final class MikrotikConfigurationTest {
     vc.setHostname("test-mikrotik");
     MikrotikInterface iface = new MikrotikInterface("ether1", "ether");
     iface.addAddress(ConcreteInterfaceAddress.parse("10.0.0.1/24"));
-    vc.getInterfaces().put(iface.getName(), iface);
+    vc.getMainVrf().getInterfaces().put(iface.getName(), iface);
 
     List<Configuration> configs = vc.toVendorIndependentConfigurations();
 
@@ -122,7 +144,7 @@ public final class MikrotikConfigurationTest {
     iface.setDisabled(true);
     ConcreteInterfaceAddress address = ConcreteInterfaceAddress.parse("192.168.25.1/24");
     iface.addAddress(address);
-    vc.getInterfaces().put(iface.getName(), iface);
+    vc.getMainVrf().getInterfaces().put(iface.getName(), iface);
 
     List<Configuration> configs = vc.toVendorIndependentConfigurations();
 
@@ -145,7 +167,7 @@ public final class MikrotikConfigurationTest {
     MikrotikInterface iface = new MikrotikInterface("vlan25", "vlan");
     iface.setVlanId(25);
     iface.setParentInterface("");
-    vc.getInterfaces().put(iface.getName(), iface);
+    vc.getMainVrf().getInterfaces().put(iface.getName(), iface);
 
     List<Configuration> configs = vc.toVendorIndependentConfigurations();
 
@@ -165,11 +187,11 @@ public final class MikrotikConfigurationTest {
     MikrotikInterface customerB = new MikrotikInterface("customer-b", "ethernet");
     MikrotikInterface uplinkCore = new MikrotikInterface("uplink-core", "ethernet");
     MikrotikInterface mgmt = new MikrotikInterface("mgmt", "ethernet");
-    vc.getInterfaces().put(bridge.getName(), bridge);
-    vc.getInterfaces().put(customerA.getName(), customerA);
-    vc.getInterfaces().put(customerB.getName(), customerB);
-    vc.getInterfaces().put(uplinkCore.getName(), uplinkCore);
-    vc.getInterfaces().put(mgmt.getName(), mgmt);
+    vc.getMainVrf().getInterfaces().put(bridge.getName(), bridge);
+    vc.getMainVrf().getInterfaces().put(customerA.getName(), customerA);
+    vc.getMainVrf().getInterfaces().put(customerB.getName(), customerB);
+    vc.getMainVrf().getInterfaces().put(uplinkCore.getName(), uplinkCore);
+    vc.getMainVrf().getInterfaces().put(mgmt.getName(), mgmt);
 
     MikrotikBridgePort bridgePortA = new MikrotikBridgePort("bridge-lan", "customer-a");
     bridgePortA.setPvid(10);
@@ -225,8 +247,8 @@ public final class MikrotikConfigurationTest {
     MikrotikConfiguration vc = new MikrotikConfiguration();
     vc.setHostname("test-mikrotik");
 
-    vc.getInterfaces().put("bridge-lan", new MikrotikInterface("bridge-lan", "bridge"));
-    vc.getInterfaces().put("trunk1", new MikrotikInterface("trunk1", "ethernet"));
+    vc.getMainVrf().getInterfaces().put("bridge-lan", new MikrotikInterface("bridge-lan", "bridge"));
+    vc.getMainVrf().getInterfaces().put("trunk1", new MikrotikInterface("trunk1", "ethernet"));
 
     MikrotikBridgePort trunkPort = new MikrotikBridgePort("bridge-lan", "trunk1");
     trunkPort.setPvid(100);
@@ -249,8 +271,8 @@ public final class MikrotikConfigurationTest {
     MikrotikConfiguration vc = new MikrotikConfiguration();
     vc.setHostname("test-mikrotik");
 
-    vc.getInterfaces().put("bridge-lan", new MikrotikInterface("bridge-lan", "bridge"));
-    vc.getInterfaces().put("ether1", new MikrotikInterface("ether1", "ethernet"));
+    vc.getMainVrf().getInterfaces().put("bridge-lan", new MikrotikInterface("bridge-lan", "bridge"));
+    vc.getMainVrf().getInterfaces().put("ether1", new MikrotikInterface("ether1", "ethernet"));
 
     MikrotikBridgeVlan bridgeVlan = new MikrotikBridgeVlan("bridge-lan");
     bridgeVlan.addVlanId(10);
@@ -270,8 +292,8 @@ public final class MikrotikConfigurationTest {
     MikrotikConfiguration vc = new MikrotikConfiguration();
     vc.setHostname("test-mikrotik");
 
-    vc.getInterfaces().put("bridge-lan", new MikrotikInterface("bridge-lan", "bridge"));
-    vc.getInterfaces().put("trunk1", new MikrotikInterface("trunk1", "ethernet"));
+    vc.getMainVrf().getInterfaces().put("bridge-lan", new MikrotikInterface("bridge-lan", "bridge"));
+    vc.getMainVrf().getInterfaces().put("trunk1", new MikrotikInterface("trunk1", "ethernet"));
 
     MikrotikBridgePort first = new MikrotikBridgePort("bridge-lan", "trunk1");
     first.setPvid(100);

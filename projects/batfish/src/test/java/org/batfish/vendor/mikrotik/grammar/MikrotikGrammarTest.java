@@ -113,18 +113,19 @@ public class MikrotikGrammarTest {
     ExtractionResult result = parseAndExtract("mikrotik_interface_basic");
 
     MikrotikConfiguration vc = result._configuration;
-    assertThat(vc.getInterfaces().keySet(), containsInAnyOrder("bridge-lan", "customer-a", "spare"));
+    assertThat(
+        vc.getMainVrf().getInterfaces().keySet(), containsInAnyOrder("bridge-lan", "customer-a", "spare"));
 
-    MikrotikInterface bridgeLan = vc.getInterfaces().get("bridge-lan");
+    MikrotikInterface bridgeLan = vc.getMainVrf().getInterfaces().get("bridge-lan");
     assertThat(bridgeLan, notNullValue());
     assertThat(bridgeLan.getType(), equalTo("bridge"));
     assertThat(bridgeLan.isDisabled(), equalTo(false));
 
-    MikrotikInterface customerA = vc.getInterfaces().get("customer-a");
+    MikrotikInterface customerA = vc.getMainVrf().getInterfaces().get("customer-a");
     assertThat(customerA, notNullValue());
     assertThat(customerA.getType(), equalTo("ethernet"));
 
-    MikrotikInterface spare = vc.getInterfaces().get("spare");
+    MikrotikInterface spare = vc.getMainVrf().getInterfaces().get("spare");
     assertThat(spare, notNullValue());
     assertThat(spare.getType(), equalTo("ethernet"));
     assertThat(spare.isDisabled(), equalTo(true));
@@ -144,7 +145,7 @@ public class MikrotikGrammarTest {
     ExtractionResult result = parseAndExtractFromString(src);
 
     MikrotikInterface interfaceWithAddress =
-        result._configuration.getInterfaces().get("uplink-core");
+        result._configuration.getMainVrf().getInterfaces().get("uplink-core");
     assertThat(interfaceWithAddress, notNullValue());
     assertThat(interfaceWithAddress.getAddresses(), hasSize(1));
     assertThat(
@@ -169,9 +170,9 @@ public class MikrotikGrammarTest {
     assertThat(tree.toStringTree(parser.getParser()), containsString("interface_vlan_add"));
 
     ExtractionResult result = parseAndExtractFromString(src);
-    MikrotikInterface ether6 = result._configuration.getInterfaces().get("ether6");
-    MikrotikInterface vlan25 = result._configuration.getInterfaces().get("vlan25");
-    MikrotikInterface vlan30 = result._configuration.getInterfaces().get("vlan30");
+    MikrotikInterface ether6 = result._configuration.getMainVrf().getInterfaces().get("ether6");
+    MikrotikInterface vlan25 = result._configuration.getMainVrf().getInterfaces().get("vlan25");
+    MikrotikInterface vlan30 = result._configuration.getMainVrf().getInterfaces().get("vlan30");
     assertThat(ether6, notNullValue());
     assertThat(ether6.getType(), equalTo("ethernet"));
     assertThat(vlan25, notNullValue());
@@ -298,7 +299,7 @@ public class MikrotikGrammarTest {
             + "/interface vlan add interface=bridge-lan name=vlan25 vlan-id=abc mtu=bad\n";
     ExtractionResult result = parseAndExtractFromString(src);
 
-    MikrotikInterface vlan25 = result._configuration.getInterfaces().get("vlan25");
+    MikrotikInterface vlan25 = result._configuration.getMainVrf().getInterfaces().get("vlan25");
     assertThat(vlan25, notNullValue());
     assertThat(vlan25.getVlanId(), equalTo((Integer) null));
     assertThat(vlan25.getMtu(), equalTo((Integer) null));
@@ -312,8 +313,8 @@ public class MikrotikGrammarTest {
   @Test
   public void testMikrotikInterfaceExtractionFromFixtureIncludesVlans() {
     ExtractionResult result = parseAndExtract("mikrotik_interfaces_and_routes.export");
-    MikrotikInterface vlan25 = result._configuration.getInterfaces().get("vlan25");
-    MikrotikInterface vlan30 = result._configuration.getInterfaces().get("vlan30");
+    MikrotikInterface vlan25 = result._configuration.getMainVrf().getInterfaces().get("vlan25");
+    MikrotikInterface vlan30 = result._configuration.getMainVrf().getInterfaces().get("vlan30");
 
     assertThat(vlan25, notNullValue());
     assertThat(vlan25.getVlanId(), equalTo(25));
@@ -353,7 +354,7 @@ public class MikrotikGrammarTest {
   @Test
   public void testMikrotikStaticRouteExtraction() {
     ExtractionResult result = parseAndExtract("mikrotik_static_route_basic");
-    List<MikrotikStaticRoute> routes = result._configuration.getStaticRoutes();
+    List<MikrotikStaticRoute> routes = result._configuration.getMainVrf().getStaticRoutes();
 
     assertThat(routes, hasSize(2));
     assertThat(routes.get(0).getNetwork(), equalTo(Prefix.ZERO));
@@ -369,7 +370,7 @@ public class MikrotikGrammarTest {
   @Test
   public void testMikrotikStaticRouteInvalidGatewayWarning() {
     ExtractionResult result = parseAndExtractFromString("/ip route add gateway=not-an-ip\n");
-    assertThat(result._configuration.getStaticRoutes(), hasSize(0));
+    assertThat(result._configuration.getMainVrf().getStaticRoutes(), hasSize(0));
     assertThat(result._warnings.getParseWarnings(), hasSize(1));
     assertThat(
         result._warnings.getParseWarnings().get(0).getComment(),

@@ -325,7 +325,7 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
     String ifaceName = maybeIfaceName.get();
     _configuration.referenceStructure(
         INTERFACE, ifaceName, IP_ADDRESS_INTERFACE, ctx.getStart().getLine());
-    MikrotikInterface iface = _configuration.getInterfaces().get(ifaceName);
+    MikrotikInterface iface = _configuration.getMainVrf().getInterfaces().get(ifaceName);
     if (iface == null) {
       _w.addWarning(
           ctx,
@@ -382,7 +382,10 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
       }
     }
 
-    _configuration.getStaticRoutes().add(new MikrotikStaticRoute(network, nextHopIp, adminDistance));
+    _configuration
+        .getMainVrf()
+        .getStaticRoutes()
+        .add(new MikrotikStaticRoute(network, nextHopIp, adminDistance));
     _configuration.referenceStructure(
         STATIC_ROUTE, network.toString(), STATIC_ROUTE_SELF_REFERENCE, ctx.getStart().getLine());
   }
@@ -428,7 +431,10 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
   }
 
   private @Nonnull MikrotikInterface getOrCreateInterface(String name, String type) {
-    return _configuration.getInterfaces().computeIfAbsent(name, key -> new MikrotikInterface(key, type));
+    return _configuration
+        .getMainVrf()
+        .getInterfaces()
+        .computeIfAbsent(name, key -> new MikrotikInterface(key, type));
   }
 
   private final @Nonnull MikrotikConfiguration _configuration;
