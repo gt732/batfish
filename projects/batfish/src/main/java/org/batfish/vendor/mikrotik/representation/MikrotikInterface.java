@@ -40,6 +40,14 @@ public final class MikrotikInterface implements Serializable {
     _mtu = mtu;
   }
 
+  public @Nullable Double getBandwidth() {
+    return _bandwidth;
+  }
+
+  public void setBandwidth(@Nullable Double bandwidth) {
+    _bandwidth = bandwidth;
+  }
+
   public boolean isDisabled() {
     return _disabled;
   }
@@ -131,6 +139,7 @@ public final class MikrotikInterface implements Serializable {
   private final @Nonnull String _name;
   private @Nonnull String _type;
   private @Nullable Integer _mtu;
+  private @Nullable Double _bandwidth;
   private boolean _disabled;
   private @Nullable Integer _vlanId;
   private @Nullable String _parentInterface;

@@ -1,0 +1,28 @@
+# mar/13/2026 20:22:29 by RouterOS 6.49.17
+# software id =
+#
+#
+#
+/interface bridge add mtu=1588 name=bridge-lan
+/interface ethernet set [ find default-name=ether1 ] disable-running-check=no mtu=1501
+/interface ethernet set [ find default-name=ether2 ] disable-running-check=no mtu=1598
+/interface ethernet set [ find default-name=ether3 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether4 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether5 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether6 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether7 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether8 ] disable-running-check=no
+/interface eoip add local-address=192.0.2.2 mac-address=FE:87:0A:78:BC:24 mtu=1458 name=eoip-l2 remote-address=192.0.2.9 tunnel-id=210
+/interface gre add local-address=192.0.2.2 mtu=1476 name=gre-core remote-address=192.0.2.1
+/interface ipip add local-address=192.0.2.2 mtu=1480 name=ipip-backhaul remote-address=192.0.2.5
+/interface vlan add interface=bridge-lan mtu=1496 name=vlan110 vlan-id=110
+/interface vlan add interface=ether2 mtu=1488 name=vlan120 vlan-id=120
+/interface bridge port add bridge=bridge-lan interface=ether5 pvid=110
+/ip address add address=192.0.2.2/30 interface=ether1 network=192.0.2.0
+/ip address add address=10.11.0.1/24 interface=vlan110 network=10.11.0.0
+/ip address add address=10.12.0.1/24 interface=vlan120 network=10.12.0.0
+/ip address add address=10.0.0.2/30 interface=gre-core network=10.0.0.0
+/ip address add address=10.0.1.2/30 interface=ipip-backhaul network=10.0.1.0
+/ip route add distance=1 dst-address=203.0.113.0/24 gateway=10.0.0.1
+/ip route add distance=1 dst-address=203.0.114.0/24 gateway=10.0.1.1
+/system identity set name=mt-story53-probe

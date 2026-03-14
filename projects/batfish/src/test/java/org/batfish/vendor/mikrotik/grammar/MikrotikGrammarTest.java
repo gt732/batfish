@@ -105,6 +105,15 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testLexerTokenizesBandwidthKeyword() {
+    String input = "/interface ethernet set [ find default-name=ether1 ] bandwidth=1000000\n";
+    MikrotikLexer lexer = new MikrotikLexer(CharStreams.fromString(input));
+    List<Integer> tokenTypes = lexer.getAllTokens().stream().map(Token::getType).toList();
+
+    assertThat(tokenTypes, hasItem(MikrotikLexer.BANDWIDTH));
+  }
+
+  @Test
   public void testParserParsesReferenceFixture() {
     String src = readResource(TESTCONFIGS_PREFIX + "mikrotik_interfaces_and_routes.export", UTF_8);
     Settings settings = new Settings();
@@ -154,6 +163,21 @@ public class MikrotikGrammarTest {
     assertThat(tree.toStringTree(parser.getParser()), containsString("interface_ipip_add"));
     assertThat(tree.toStringTree(parser.getParser()), containsString("interface_eoip_add"));
     assertThat(tree.toStringTree(parser.getParser()), containsString("interface_wireguard_add"));
+  }
+
+  @Test
+  public void testParserParsesInlineBandwidthCommand() {
+    String src =
+        "/interface ethernet set [ find default-name=ether1 ] bandwidth=1000000\n"
+            + "/interface bridge add name=br0 bandwidth=2000000\n";
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    assertThat(tree, notNullValue());
+    assertThat(tree.toStringTree(parser.getParser()), containsString("if_prop_bandwidth"));
   }
 
   @Test
@@ -411,6 +435,81 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testExtractorMtuEthernetInline() {
+    String src = "/interface ethernet set [ find default-name=ether1 ] mtu=9000\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface ether1 = result._configuration.getMainVrf().getInterfaces().get("ether1");
+    assertThat(ether1, notNullValue());
+    assertThat(ether1.getMtu(), equalTo(9000));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testExtractorMtuBridgeInline() {
+    String src = "/interface bridge add name=br0 mtu=1588\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface br0 = result._configuration.getMainVrf().getInterfaces().get("br0");
+    assertThat(br0, notNullValue());
+    assertThat(br0.getMtu(), equalTo(1588));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testExtractorMtuVlanInline() {
+    String src = "/interface vlan add name=vlan10 vlan-id=10 interface=ether1 mtu=1496\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface vlan10 = result._configuration.getMainVrf().getInterfaces().get("vlan10");
+    assertThat(vlan10, notNullValue());
+    assertThat(vlan10.getMtu(), equalTo(1496));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("references undefined parent interface ether1"));
+  }
+
+  @Test
+  public void testExtractorMalformedMtuWarningInline() {
+    String src = "/interface ethernet set [ find default-name=ether1 ] mtu=notanumber\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface ether1 = result._configuration.getMainVrf().getInterfaces().get("ether1");
+    assertThat(ether1, notNullValue());
+    assertThat(ether1.getMtu(), equalTo((Integer) null));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("Invalid mtu value 'notanumber' for interface ether1"));
+  }
+
+  @Test
+  public void testExtractorBandwidthInline() {
+    String src = "/interface ethernet set [ find default-name=ether1 ] bandwidth=1000000\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface ether1 = result._configuration.getMainVrf().getInterfaces().get("ether1");
+    assertThat(ether1, notNullValue());
+    assertThat(ether1.getBandwidth(), equalTo(1000000.0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testExtractorMalformedBandwidthWarningInline() {
+    String src = "/interface ethernet set [ find default-name=ether1 ] bandwidth=notanumber\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    MikrotikInterface ether1 = result._configuration.getMainVrf().getInterfaces().get("ether1");
+    assertThat(ether1, notNullValue());
+    assertThat(ether1.getBandwidth(), equalTo((Double) null));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("Invalid bandwidth value 'notanumber' for interface ether1"));
+  }
+
+  @Test
   public void testExtractorTunnelInvalidAddressWarningInline() {
     String src =
         "/interface gre add name=gre0 local-address=not-an-ip remote-address=5.6.7.8 mtu=1476\n";
@@ -583,6 +682,41 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testExtractorMtuFixtureAssertsFullInterfaceSet() {
+    ExtractionResult result = parseAndExtract("mikrotik_mtu_interfaces");
+    Map<String, MikrotikInterface> interfaces = result._configuration.getMainVrf().getInterfaces();
+    assertThat(
+        interfaces.keySet(),
+        containsInAnyOrder(
+            "bridge-lan",
+            "ether1",
+            "ether2",
+            "ether3",
+            "ether4",
+            "ether5",
+            "ether6",
+            "ether7",
+            "ether8",
+            "eoip-l2",
+            "gre-core",
+            "ipip-backhaul",
+            "vlan110",
+            "vlan120"));
+
+    assertThat(interfaces.get("bridge-lan").getMtu(), equalTo(1588));
+    assertThat(interfaces.get("ether1").getMtu(), equalTo(1501));
+    assertThat(interfaces.get("ether2").getMtu(), equalTo(1598));
+    assertThat(interfaces.get("eoip-l2").getMtu(), equalTo(1458));
+    assertThat(interfaces.get("gre-core").getMtu(), equalTo(1476));
+    assertThat(interfaces.get("ipip-backhaul").getMtu(), equalTo(1480));
+    assertThat(interfaces.get("vlan110").getMtu(), equalTo(1496));
+    assertThat(interfaces.get("vlan120").getMtu(), equalTo(1488));
+    assertThat(interfaces.get("ether3").getMtu(), equalTo((Integer) null));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+    assertThat(result._warnings.getRedFlagWarnings(), hasSize(0));
+  }
+
+  @Test
   public void testViAndDataplaneBondingVlanFromFixture() throws Exception {
     ExtractionResult result = parseAndExtract("mikrotik_bonding_vlan_vi");
     Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
@@ -683,6 +817,50 @@ public class MikrotikGrammarTest {
                     route.getProtocol() == RoutingProtocol.CONNECTED
                         && route.getNetwork().equals(Prefix.parse("10.255.255.0/24"))),
         equalTo(true));
+  }
+
+  @Test
+  public void testViMtuFromFixture() {
+    ExtractionResult result = parseAndExtract("mikrotik_mtu_interfaces");
+    Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
+
+    assertThat(viConfig.getAllInterfaces().get("bridge-lan").getMtu(), equalTo((Integer) 1588));
+    assertThat(viConfig.getAllInterfaces().get("ether1").getMtu(), equalTo((Integer) 1501));
+    assertThat(viConfig.getAllInterfaces().get("ether2").getMtu(), equalTo((Integer) 1598));
+    assertThat(viConfig.getAllInterfaces().get("eoip-l2").getMtu(), equalTo((Integer) 1458));
+    assertThat(viConfig.getAllInterfaces().get("gre-core").getMtu(), equalTo((Integer) 1476));
+    assertThat(viConfig.getAllInterfaces().get("ipip-backhaul").getMtu(), equalTo((Integer) 1480));
+    assertThat(viConfig.getAllInterfaces().get("vlan110").getMtu(), equalTo((Integer) 1496));
+    assertThat(viConfig.getAllInterfaces().get("vlan120").getMtu(), equalTo((Integer) 1488));
+    assertThat(
+        viConfig.getAllInterfaces().get("ether3").getMtu(),
+        equalTo((Integer) org.batfish.datamodel.Interface.DEFAULT_MTU));
+  }
+
+  @Test
+  public void testViAndDataplaneMtuFromFixture() throws Exception {
+    Batfish batfish =
+        BatfishTestUtils.getBatfishFromTestrigText(
+            TestrigText.builder()
+                .setConfigurationText(
+                    ImmutableMap.of(
+                        "mtik-mtu-vi",
+                        readResource(TESTCONFIGS_PREFIX + "mikrotik_mtu_interfaces", UTF_8)))
+                .build(),
+            _folder);
+    batfish.computeDataPlane(batfish.getSnapshot());
+    DataPlane dp = batfish.loadDataPlane(batfish.getSnapshot());
+    List<Prefix> connectedNetworks =
+        dp.getRibs().values().stream()
+            .flatMap(rib -> rib.getRoutes().stream())
+            .filter(route -> route.getProtocol() == RoutingProtocol.CONNECTED)
+            .map(AbstractRoute::getNetwork)
+            .toList();
+    assertThat(connectedNetworks, hasItem(Prefix.parse("192.0.2.0/30")));
+    assertThat(connectedNetworks, hasItem(Prefix.parse("10.11.0.0/24")));
+    assertThat(connectedNetworks, hasItem(Prefix.parse("10.12.0.0/24")));
+    assertThat(connectedNetworks, hasItem(Prefix.parse("10.0.0.0/30")));
+    assertThat(connectedNetworks, hasItem(Prefix.parse("10.0.1.0/30")));
   }
 
   @Test

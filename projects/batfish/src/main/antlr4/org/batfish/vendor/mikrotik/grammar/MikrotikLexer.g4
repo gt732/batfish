@@ -279,6 +279,11 @@ DISTANCE
   'distance'
 ;
 
+BANDWIDTH
+:
+  'bandwidth'
+;
+
 MTU
 :
   'mtu'

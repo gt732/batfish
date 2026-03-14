@@ -125,6 +125,31 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
     String name = maybeName.get();
     MikrotikInterface iface = getOrCreateInterface(name, "bridge");
     iface.setType("bridge");
+    for (MikrotikParser.Interface_bridge_add_propContext prop : ctx.interface_bridge_add_prop()) {
+      if (prop.if_prop_mtu() != null) {
+        String rawMtu = extractParameterValue(prop.if_prop_mtu().parameter_value());
+        try {
+          iface.setMtu(Integer.parseInt(rawMtu));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
+        }
+      } else if (prop.if_prop_bandwidth() != null) {
+        String rawBw = extractParameterValue(prop.if_prop_bandwidth().parameter_value());
+        try {
+          iface.setBandwidth(Double.parseDouble(rawBw));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid bandwidth value '%s' for interface %s", rawBw, name));
+        }
+      }
+    }
     _configuration.defineStructure(INTERFACE, name, ctx);
     _configuration.referenceStructure(
         INTERFACE, name, INTERFACE_SELF_REFERENCE, ctx.getStart().getLine());
@@ -180,6 +205,17 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
               _parser,
               String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
         }
+      } else if (prop.if_prop_bandwidth() != null) {
+        String rawBw = extractParameterValue(prop.if_prop_bandwidth().parameter_value());
+        try {
+          iface.setBandwidth(Double.parseDouble(rawBw));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid bandwidth value '%s' for interface %s", rawBw, name));
+        }
       }
     }
     _configuration.defineStructure(INTERFACE, name, ctx);
@@ -215,7 +251,27 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
       if (prop.if_prop_disabled() != null) {
         iface.setDisabled(parseBoolean(extractParameterValue(prop.if_prop_disabled().parameter_value())));
       } else if (prop.if_prop_mtu() != null) {
-        iface.setMtu(Integer.parseInt(extractParameterValue(prop.if_prop_mtu().parameter_value())));
+        String rawMtu = extractParameterValue(prop.if_prop_mtu().parameter_value());
+        try {
+          iface.setMtu(Integer.parseInt(rawMtu));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
+        }
+      } else if (prop.if_prop_bandwidth() != null) {
+        String rawBw = extractParameterValue(prop.if_prop_bandwidth().parameter_value());
+        try {
+          iface.setBandwidth(Double.parseDouble(rawBw));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid bandwidth value '%s' for interface %s", rawBw, name));
+        }
       }
     }
     _configuration.defineStructure(INTERFACE, name, ctx);
@@ -270,6 +326,17 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
               getFullText(ctx),
               _parser,
               String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
+        }
+      } else if (prop.if_prop_bandwidth() != null) {
+        String rawBw = extractParameterValue(prop.if_prop_bandwidth().parameter_value());
+        try {
+          iface.setBandwidth(Double.parseDouble(rawBw));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid bandwidth value '%s' for interface %s", rawBw, name));
         }
       }
     }
@@ -336,6 +403,17 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
               _parser,
               String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
         }
+      } else if (prop.if_prop_bandwidth() != null) {
+        String rawBw = extractParameterValue(prop.if_prop_bandwidth().parameter_value());
+        try {
+          iface.setBandwidth(Double.parseDouble(rawBw));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid bandwidth value '%s' for interface %s", rawBw, name));
+        }
       }
     }
     _configuration.defineStructure(INTERFACE, name, ctx);
@@ -395,6 +473,17 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
               getFullText(ctx),
               _parser,
               String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
+        }
+      } else if (prop.if_prop_bandwidth() != null) {
+        String rawBw = extractParameterValue(prop.if_prop_bandwidth().parameter_value());
+        try {
+          iface.setBandwidth(Double.parseDouble(rawBw));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid bandwidth value '%s' for interface %s", rawBw, name));
         }
       }
     }
@@ -467,6 +556,17 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
               _parser,
               String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
         }
+      } else if (prop.if_prop_bandwidth() != null) {
+        String rawBw = extractParameterValue(prop.if_prop_bandwidth().parameter_value());
+        try {
+          iface.setBandwidth(Double.parseDouble(rawBw));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid bandwidth value '%s' for interface %s", rawBw, name));
+        }
       }
     }
     _configuration.defineStructure(INTERFACE, name, ctx);
@@ -512,6 +612,17 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
               getFullText(ctx),
               _parser,
               String.format("Invalid mtu value '%s' for interface %s", rawMtu, name));
+        }
+      } else if (prop.if_prop_bandwidth() != null) {
+        String rawBw = extractParameterValue(prop.if_prop_bandwidth().parameter_value());
+        try {
+          iface.setBandwidth(Double.parseDouble(rawBw));
+        } catch (NumberFormatException e) {
+          _w.addWarning(
+              ctx,
+              getFullText(ctx),
+              _parser,
+              String.format("Invalid bandwidth value '%s' for interface %s", rawBw, name));
         }
       }
     }

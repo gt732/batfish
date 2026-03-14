@@ -64,6 +64,10 @@ public final class Conversions {
     if (mtu != null) {
       builder.setMtu(mtu);
     }
+    Double bandwidth = iface.getBandwidth();
+    if (bandwidth != null) {
+      builder.setBandwidth(bandwidth);
+    }
 
     List<ConcreteInterfaceAddress> addresses = iface.getAddresses();
     if (!addresses.isEmpty()) {

@@ -12,6 +12,8 @@ interface_bridge_add
 interface_bridge_add_prop
 :
   if_prop_name
+  | if_prop_mtu
+  | if_prop_bandwidth
   | if_prop_comment
   | key_value_parameter
 ;
@@ -29,6 +31,7 @@ interface_bonding_add_prop
   | if_bonding_prop_lacp_rate
   | if_prop_disabled
   | if_prop_mtu
+  | if_prop_bandwidth
   | if_prop_comment
   | key_value_parameter
 ;
@@ -44,6 +47,7 @@ interface_ethernet_set_prop
   | if_prop_disabled
   | if_prop_comment
   | if_prop_mtu
+  | if_prop_bandwidth
   | if_prop_disable_running_check
   | key_value_parameter
 ;
@@ -107,6 +111,7 @@ interface_vlan_add_prop
   | if_prop_interface
   | if_prop_disabled
   | if_prop_mtu
+  | if_prop_bandwidth
   | if_prop_comment
   | key_value_parameter
 ;
@@ -122,6 +127,7 @@ interface_gre_add_prop
   | if_tunnel_prop_local_address
   | if_tunnel_prop_remote_address
   | if_prop_mtu
+  | if_prop_bandwidth
   | if_prop_disabled
   | if_prop_comment
   | key_value_parameter
@@ -138,6 +144,7 @@ interface_ipip_add_prop
   | if_tunnel_prop_local_address
   | if_tunnel_prop_remote_address
   | if_prop_mtu
+  | if_prop_bandwidth
   | if_prop_disabled
   | if_prop_comment
   | key_value_parameter
@@ -155,6 +162,7 @@ interface_eoip_add_prop
   | if_tunnel_prop_remote_address
   | if_eoip_prop_tunnel_id
   | if_prop_mtu
+  | if_prop_bandwidth
   | if_prop_disabled
   | if_prop_comment
   | key_value_parameter
@@ -170,6 +178,7 @@ interface_wireguard_add_prop
   if_prop_name
   | if_wireguard_prop_listen_port
   | if_prop_mtu
+  | if_prop_bandwidth
   | if_prop_disabled
   | if_prop_comment
   | key_value_parameter
@@ -213,6 +222,11 @@ if_prop_comment
 if_prop_mtu
 :
   MTU EQUALS parameter_value
+;
+
+if_prop_bandwidth
+:
+  BANDWIDTH EQUALS parameter_value
 ;
 
 if_tunnel_prop_local_address

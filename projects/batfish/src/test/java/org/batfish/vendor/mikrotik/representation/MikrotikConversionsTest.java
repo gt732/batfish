@@ -113,6 +113,16 @@ public final class MikrotikConversionsTest {
   }
 
   @Test
+  public void testToViInterfaceBandwidth() {
+    MikrotikInterface iface = new MikrotikInterface("ether1", "ether");
+    iface.setBandwidth(1_000_000D);
+
+    Interface viIface = Conversions.toViInterface(iface);
+
+    assertThat(viIface.getBandwidth(), equalTo(1_000_000D));
+  }
+
+  @Test
   public void testToViInterfaceDeterministic() {
     MikrotikInterface iface = new MikrotikInterface("loopback1", "loopback");
     ConcreteInterfaceAddress address = ConcreteInterfaceAddress.parse("198.51.100.1/32");
