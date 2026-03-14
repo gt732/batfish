@@ -1,0 +1,21 @@
+# mar/14/2026 00:00:00 by RouterOS 6.49.17
+# software id = TEST-0003
+#
+/interface ethernet set [ find default-name=ether1 ] disable-running-check=no
+/ip address add address=192.0.2.2/30 interface=ether1 network=192.0.2.0
+/ip firewall address-list add address=192.0.2.10 comment="single host" list=trusted-hosts
+/ip firewall address-list add address=192.0.2.11 comment="second host" list=trusted-hosts
+/ip firewall address-list add address=10.10.10.0/24 comment="branch a" list=branch-prefixes
+/ip firewall address-list add address=10.20.20.0/24 comment="branch b" list=branch-prefixes
+/ip firewall address-list add address=203.0.113.53 comment="dns monitor" list=wan-monitors
+/ip firewall address-list add address=198.51.100.1 comment="isp gateway" list=wan-monitors
+/ip firewall address-list add address=192.0.2.99 comment="disabled test" disabled=yes list=disabled-entry
+/ip firewall address-list add list=bad-entries address=not-an-ip comment="invalid host"
+/ip firewall address-list add list=bad-entries address=10.0.0.0/99 comment="invalid prefix"
+/ip firewall filter add chain=input action=accept src-address-list=missing-list comment="dangling ref"
+/ip firewall filter add action=accept chain=input comment="allow trusted hosts" src-address-list=trusted-hosts
+/ip firewall filter add action=accept chain=forward comment="allow to branch prefixes" dst-address-list=branch-prefixes
+/ip firewall filter add action=accept chain=output comment="allow monitor traffic" dst-address-list=wan-monitors
+/ip firewall nat add action=masquerade chain=srcnat comment="nat branch prefixes" out-interface=ether2 src-address-list=branch-prefixes
+/ip firewall nat add action=dst-nat chain=dstnat comment="dstnat via address-list" dst-address-list=trusted-hosts dst-port=8443 protocol=tcp to-addresses=192.0.2.10 to-ports=443
+/system identity set name=mt-story71-lab

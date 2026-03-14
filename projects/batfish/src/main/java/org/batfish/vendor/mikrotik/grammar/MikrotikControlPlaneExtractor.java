@@ -1,5 +1,6 @@
 package org.batfish.vendor.mikrotik.grammar;
 
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.FIREWALL_ADDRESS_LIST;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.STATIC_ROUTE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BONDING_SLAVE_INTERFACE;
@@ -8,6 +9,10 @@ import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_BRIDGE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_TAGGED_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_UNTAGGED_INTERFACE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_FILTER_DST_ADDRESS_LIST;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_FILTER_SRC_ADDRESS_LIST;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_NAT_DST_ADDRESS_LIST;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_NAT_SRC_ADDRESS_LIST;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.INTERFACE_SELF_REFERENCE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.IP_ADDRESS_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.STATIC_ROUTE_SELF_REFERENCE;
@@ -33,6 +38,8 @@ import org.batfish.grammar.ControlPlaneExtractor;
 import org.batfish.grammar.UnrecognizedLineToken;
 import org.batfish.grammar.silent_syntax.SilentSyntaxCollection;
 import org.batfish.vendor.VendorConfiguration;
+import org.batfish.vendor.mikrotik.representation.MikrotikAddressList;
+import org.batfish.vendor.mikrotik.representation.MikrotikAddressListEntry;
 import org.batfish.vendor.mikrotik.representation.MikrotikBridgePort;
 import org.batfish.vendor.mikrotik.representation.MikrotikBridgeVlan;
 import org.batfish.vendor.mikrotik.representation.MikrotikConfiguration;
@@ -877,6 +884,136 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
       return;
     }
     iface.addAddress(ConcreteInterfaceAddress.parse(maybeAddress.get()));
+  }
+
+  @Override
+  public void enterIp_firewall_address_list_add(
+      MikrotikParser.Ip_firewall_address_list_addContext ctx) {
+    String listName =
+        ctx.ip_firewall_address_list_add_prop().stream()
+            .filter(prop -> prop.ip_fw_al_prop_list() != null)
+            .map(prop -> extractParameterValue(prop.ip_fw_al_prop_list().parameter_value()))
+            .findFirst()
+            .orElse(null);
+    String rawAddress =
+        ctx.ip_firewall_address_list_add_prop().stream()
+            .filter(prop -> prop.ip_fw_al_prop_address() != null)
+            .map(prop -> extractParameterValue(prop.ip_fw_al_prop_address().parameter_value()))
+            .findFirst()
+            .orElse(null);
+
+    if (listName == null) {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          "address-list entry missing required list= field; skipping");
+      return;
+    }
+    if (rawAddress == null) {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          String.format(
+              "address-list '%s' entry missing required address= field; skipping", listName));
+      return;
+    }
+
+    Prefix prefix = null;
+    Ip hostIp = null;
+    if (rawAddress.contains("/")) {
+      try {
+        prefix = Prefix.parse(rawAddress);
+      } catch (IllegalArgumentException e) {
+        _w.addWarning(
+            ctx,
+            getFullText(ctx),
+            _parser,
+            String.format(
+                "address-list '%s' has invalid prefix '%s'; skipping entry", listName, rawAddress));
+        return;
+      }
+    } else {
+      try {
+        hostIp = Ip.parse(rawAddress);
+      } catch (IllegalArgumentException e) {
+        _w.addWarning(
+            ctx,
+            getFullText(ctx),
+            _parser,
+            String.format(
+                "address-list '%s' has invalid address '%s'; skipping entry", listName, rawAddress));
+        return;
+      }
+    }
+
+    String comment =
+        ctx.ip_firewall_address_list_add_prop().stream()
+            .filter(prop -> prop.ip_fw_al_prop_comment() != null)
+            .map(prop -> extractParameterValue(prop.ip_fw_al_prop_comment().parameter_value()))
+            .findFirst()
+            .orElse(null);
+    boolean disabled =
+        ctx.ip_firewall_address_list_add_prop().stream()
+            .filter(prop -> prop.ip_fw_al_prop_disabled() != null)
+            .map(
+                prop ->
+                    parseBoolean(
+                        extractParameterValue(prop.ip_fw_al_prop_disabled().parameter_value())))
+            .findFirst()
+            .orElse(false);
+
+    MikrotikAddressList list =
+        _configuration.getAddressLists().computeIfAbsent(listName, MikrotikAddressList::new);
+    if (list.getEntries().isEmpty()) {
+      _configuration.defineStructure(FIREWALL_ADDRESS_LIST, listName, ctx);
+    }
+    list.addEntry(new MikrotikAddressListEntry(rawAddress, prefix, hostIp, comment, disabled));
+  }
+
+  @Override
+  public void enterIp_firewall_filter_add(MikrotikParser.Ip_firewall_filter_addContext ctx) {
+    for (MikrotikParser.Ip_firewall_filter_add_propContext prop : ctx.ip_firewall_filter_add_prop()) {
+      if (prop.ip_fw_filter_prop_src_address_list() != null) {
+        String name =
+            extractParameterValue(prop.ip_fw_filter_prop_src_address_list().parameter_value());
+        _configuration.referenceStructure(
+            FIREWALL_ADDRESS_LIST,
+            name,
+            FIREWALL_FILTER_SRC_ADDRESS_LIST,
+            prop.ip_fw_filter_prop_src_address_list().getStart().getLine());
+      } else if (prop.ip_fw_filter_prop_dst_address_list() != null) {
+        String name =
+            extractParameterValue(prop.ip_fw_filter_prop_dst_address_list().parameter_value());
+        _configuration.referenceStructure(
+            FIREWALL_ADDRESS_LIST,
+            name,
+            FIREWALL_FILTER_DST_ADDRESS_LIST,
+            prop.ip_fw_filter_prop_dst_address_list().getStart().getLine());
+      }
+    }
+  }
+
+  @Override
+  public void enterIp_firewall_nat_add(MikrotikParser.Ip_firewall_nat_addContext ctx) {
+    for (MikrotikParser.Ip_firewall_nat_add_propContext prop : ctx.ip_firewall_nat_add_prop()) {
+      if (prop.ip_fw_nat_prop_src_address_list() != null) {
+        String name = extractParameterValue(prop.ip_fw_nat_prop_src_address_list().parameter_value());
+        _configuration.referenceStructure(
+            FIREWALL_ADDRESS_LIST,
+            name,
+            FIREWALL_NAT_SRC_ADDRESS_LIST,
+            prop.ip_fw_nat_prop_src_address_list().getStart().getLine());
+      } else if (prop.ip_fw_nat_prop_dst_address_list() != null) {
+        String name = extractParameterValue(prop.ip_fw_nat_prop_dst_address_list().parameter_value());
+        _configuration.referenceStructure(
+            FIREWALL_ADDRESS_LIST,
+            name,
+            FIREWALL_NAT_DST_ADDRESS_LIST,
+            prop.ip_fw_nat_prop_dst_address_list().getStart().getLine());
+      }
+    }
   }
 
   @Override

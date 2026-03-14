@@ -18,11 +18,13 @@ word
   | SLAVES
   | MODE
   | LACP_RATE
+  | LIST
   | SECURITY_PROFILES
   | IP
   | ADDRESS
   | ROUTE
   | DST_ADDRESS
+  | DST_ADDRESS_LIST
   | GATEWAY
   | DISTANCE
   | DNS
@@ -41,6 +43,7 @@ word
   | PEER
   | PREEMPTION_MODE
   | SNMP
+  | SRC_ADDRESS_LIST
   | COMMUNITY
   | TOOL
   | GRAPHING
@@ -55,6 +58,7 @@ word
   | COMMENT
   | DOWN_SCRIPT
   | MTU
+  | NAT
   | PVID
   | TAGGED
   | TIMEOUT

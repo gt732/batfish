@@ -5,7 +5,7 @@ options {
    tokenVocab = MikrotikLexer;
 }
 
-import Mikrotik_common, Mikrotik_interface, Mikrotik_static, Mikrotik_tool;
+import Mikrotik_common, Mikrotik_interface, Mikrotik_ip_firewall, Mikrotik_static, Mikrotik_tool;
 
 mikrotik_configuration
 :
@@ -70,7 +70,10 @@ ip_route_command
 
 ip_other_command
 :
-  ip_subpath command_tail?
+  ip_firewall_address_list_add
+  | ip_firewall_filter_add
+  | ip_firewall_nat_add
+  | ip_subpath command_tail?
 ;
 
 ip_subpath

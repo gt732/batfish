@@ -1,5 +1,6 @@
 package org.batfish.vendor.mikrotik.representation;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -13,14 +14,17 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.common.Warnings;
+import org.batfish.datamodel.AclIpSpace;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Configuration;
+import org.batfish.datamodel.EmptyIpSpace;
 import org.batfish.datamodel.IntegerSpace;
 import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.Interface.Dependency;
 import org.batfish.datamodel.Interface.DependencyType;
 import org.batfish.datamodel.InterfaceType;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.IpSpace;
 import org.batfish.datamodel.StaticRoute;
 import org.batfish.datamodel.SwitchportMode;
 import org.batfish.datamodel.Vrf;
@@ -156,6 +160,26 @@ public final class Conversions {
       mikrotikVrf
           .getStaticRoutes()
           .forEach(sr -> viVrf.getStaticRoutes().add(toViStaticRoute(sr)));
+    }
+  }
+
+  static void convertAddressLists(
+      Map<String, MikrotikAddressList> addressLists, Configuration c, @Nullable Warnings w) {
+    for (MikrotikAddressList list : addressLists.values()) {
+      List<IpSpace> enabledSpaces =
+          list.getEntries().stream()
+              .filter(entry -> !entry.isDisabled())
+              .map(MikrotikAddressListEntry::toIpSpace)
+              .collect(ImmutableList.toImmutableList());
+      if (enabledSpaces.isEmpty()) {
+        c.getIpSpaces().put(list.getName(), EmptyIpSpace.INSTANCE);
+        continue;
+      }
+      IpSpace combined =
+          enabledSpaces.size() == 1
+              ? enabledSpaces.get(0)
+              : AclIpSpace.union(enabledSpaces.toArray(new IpSpace[0]));
+      c.getIpSpaces().put(list.getName(), combined);
     }
   }
 

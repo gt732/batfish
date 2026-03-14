@@ -3,6 +3,7 @@ package org.batfish.vendor.mikrotik.grammar;
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.batfish.common.util.Resources.readResource;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.FIREWALL_ADDRESS_LIST;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BONDING_SLAVE_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_PORT_BRIDGE;
@@ -10,6 +11,10 @@ import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_BRIDGE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_TAGGED_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_UNTAGGED_INTERFACE;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_FILTER_DST_ADDRESS_LIST;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_FILTER_SRC_ADDRESS_LIST;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_NAT_DST_ADDRESS_LIST;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_NAT_SRC_ADDRESS_LIST;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.VLAN_INTERFACE_PARENT;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.contains;
@@ -37,6 +42,7 @@ import org.batfish.datamodel.AbstractRoute;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.DataPlane;
+import org.batfish.datamodel.EmptyIpSpace;
 import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.RoutingProtocol;
@@ -1445,6 +1451,355 @@ public class MikrotikGrammarTest {
     assertThat(
         result._warnings.getParseWarnings().get(0).getComment(),
         containsString("Invalid gateway IP: not-an-ip"));
+  }
+
+  @Test
+  public void testLexerTokenizesFirewallAddressListKeywords() {
+    String input = "/ip firewall address-list add list=trusted-hosts address=10.0.0.1\n";
+    MikrotikLexer lexer = new MikrotikLexer(CharStreams.fromString(input));
+    List<Integer> tokenTypes = lexer.getAllTokens().stream().map(Token::getType).toList();
+
+    assertThat(tokenTypes, hasItem(MikrotikLexer.ADDRESS_LIST));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.LIST));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.ADD));
+  }
+
+  @Test
+  public void testLexerTokenizesFirewallReferenceKeywords() {
+    String input = "src-address-list=foo dst-address-list=bar\n";
+    MikrotikLexer lexer = new MikrotikLexer(CharStreams.fromString(input));
+    List<Integer> tokenTypes = lexer.getAllTokens().stream().map(Token::getType).toList();
+
+    assertThat(tokenTypes, hasItem(MikrotikLexer.SRC_ADDRESS_LIST));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.DST_ADDRESS_LIST));
+  }
+
+  @Test
+  public void testParserParsesInlineFirewallAddressListWithoutGenericCommand() {
+    String src = "/ip firewall address-list add list=trusted-hosts address=10.0.0.1\n";
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    String treeText = tree.toStringTree(parser.getParser());
+    assertThat(treeText, containsString("ip_firewall_address_list_add"));
+    assertThat(treeText.contains("generic_command"), equalTo(false));
+  }
+
+  @Test
+  public void testParserParsesInlineFirewallFilterWithoutGenericCommand() {
+    String src = "/ip firewall filter add chain=input action=accept src-address-list=mylist\n";
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    String treeText = tree.toStringTree(parser.getParser());
+    assertThat(treeText, containsString("ip_firewall_filter_add"));
+    assertThat(treeText.contains("generic_command"), equalTo(false));
+  }
+
+  @Test
+  public void testExtractorFirewallAddressListHostEntry() {
+    ExtractionResult result =
+        parseAndExtractFromString(
+            "/ip firewall address-list add list=mylist address=10.1.1.1 comment=\"a host\"\n");
+
+    assertThat(result._configuration.getAddressLists(), hasKey("mylist"));
+    assertThat(result._configuration.getAddressLists().get("mylist").getEntries(), hasSize(1));
+    assertThat(
+        result._configuration.getAddressLists().get("mylist").getEntries().get(0).getHostIp(),
+        equalTo(Ip.parse("10.1.1.1")));
+    assertThat(
+        result._configuration.getAddressLists().get("mylist").getEntries().get(0).getPrefix(),
+        equalTo((Prefix) null));
+    assertThat(
+        result._configuration.getAddressLists().get("mylist").getEntries().get(0).getComment(),
+        equalTo("a host"));
+    assertThat(
+        result._configuration.getAddressLists().get("mylist").getEntries().get(0).isDisabled(),
+        equalTo(false));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testExtractorFirewallAddressListPrefixEntry() {
+    ExtractionResult result =
+        parseAndExtractFromString("/ip firewall address-list add list=mylist address=10.1.0.0/16\n");
+
+    assertThat(result._configuration.getAddressLists(), hasKey("mylist"));
+    assertThat(
+        result._configuration.getAddressLists().get("mylist").getEntries().get(0).getPrefix(),
+        equalTo(Prefix.parse("10.1.0.0/16")));
+    assertThat(
+        result._configuration.getAddressLists().get("mylist").getEntries().get(0).getHostIp(),
+        equalTo((Ip) null));
+  }
+
+  @Test
+  public void testExtractorFirewallAddressListDisabledStored() {
+    ExtractionResult result =
+        parseAndExtractFromString(
+            "/ip firewall address-list add list=mylist address=10.1.1.1 disabled=yes\n");
+
+    assertThat(result._configuration.getAddressLists(), hasKey("mylist"));
+    assertThat(result._configuration.getAddressLists().get("mylist").getEntries(), hasSize(1));
+    assertThat(
+        result._configuration.getAddressLists().get("mylist").getEntries().get(0).isDisabled(),
+        equalTo(true));
+  }
+
+  @Test
+  public void testExtractorFirewallAddressListInvalidAddressWarning() {
+    ExtractionResult result =
+        parseAndExtractFromString("/ip firewall address-list add list=mylist address=not-an-ip\n");
+
+    assertThat(result._configuration.getAddressLists().entrySet(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(result._warnings.getParseWarnings().get(0).getComment(), containsString("invalid address"));
+  }
+
+  @Test
+  public void testExtractorFirewallAddressListInvalidPrefixWarning() {
+    ExtractionResult result =
+        parseAndExtractFromString("/ip firewall address-list add list=mylist address=10.0.0.0/99\n");
+
+    assertThat(result._configuration.getAddressLists().entrySet(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(result._warnings.getParseWarnings().get(0).getComment(), containsString("invalid prefix"));
+  }
+
+  @Test
+  public void testExtractorFirewallAddressListMissingListWarning() {
+    ExtractionResult result =
+        parseAndExtractFromString("/ip firewall address-list add address=10.1.1.1\n");
+
+    assertThat(result._configuration.getAddressLists().entrySet(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("missing required list="));
+  }
+
+  @Test
+  public void testExtractorFirewallAddressListMissingAddressWarning() {
+    ExtractionResult result =
+        parseAndExtractFromString("/ip firewall address-list add list=mylist\n");
+
+    assertThat(result._configuration.getAddressLists().entrySet(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("missing required address="));
+  }
+
+  @Test
+  public void testExtractorFirewallFilterSrcAddressListReference() {
+    ExtractionResult result =
+        parseAndExtractFromString(
+            "/ip firewall filter add chain=input action=accept src-address-list=mylist\n");
+
+    Map<String, Map<org.batfish.vendor.StructureUsage, Multiset<Integer>>> references =
+        result._configuration.getStructureManager().getStructureReferences(FIREWALL_ADDRESS_LIST);
+    assertThat(references, hasKey("mylist"));
+    assertThat(references.get("mylist"), hasKey(FIREWALL_FILTER_SRC_ADDRESS_LIST));
+  }
+
+  @Test
+  public void testExtractorFirewallFilterDstAddressListReference() {
+    ExtractionResult result =
+        parseAndExtractFromString(
+            "/ip firewall filter add chain=forward action=accept dst-address-list=mylist\n");
+
+    Map<String, Map<org.batfish.vendor.StructureUsage, Multiset<Integer>>> references =
+        result._configuration.getStructureManager().getStructureReferences(FIREWALL_ADDRESS_LIST);
+    assertThat(references, hasKey("mylist"));
+    assertThat(references.get("mylist"), hasKey(FIREWALL_FILTER_DST_ADDRESS_LIST));
+  }
+
+  @Test
+  public void testExtractorFirewallNatSrcAddressListReference() {
+    ExtractionResult result =
+        parseAndExtractFromString(
+            "/ip firewall nat add chain=srcnat action=masquerade src-address-list=mylist\n");
+
+    Map<String, Map<org.batfish.vendor.StructureUsage, Multiset<Integer>>> references =
+        result._configuration.getStructureManager().getStructureReferences(FIREWALL_ADDRESS_LIST);
+    assertThat(references, hasKey("mylist"));
+    assertThat(references.get("mylist"), hasKey(FIREWALL_NAT_SRC_ADDRESS_LIST));
+  }
+
+  @Test
+  public void testExtractorFirewallNatDstAddressListReference() {
+    ExtractionResult result =
+        parseAndExtractFromString(
+            "/ip firewall nat add chain=dstnat action=dst-nat dst-address-list=mylist\n");
+
+    Map<String, Map<org.batfish.vendor.StructureUsage, Multiset<Integer>>> references =
+        result._configuration.getStructureManager().getStructureReferences(FIREWALL_ADDRESS_LIST);
+    assertThat(references, hasKey("mylist"));
+    assertThat(references.get("mylist"), hasKey(FIREWALL_NAT_DST_ADDRESS_LIST));
+  }
+
+  @Test
+  public void testExtractorFirewallAddressListFixture() {
+    ExtractionResult result = parseAndExtract("mikrotik_address_list_basic");
+
+    assertThat(
+        result._configuration.getAddressLists().keySet(),
+        containsInAnyOrder("trusted-hosts", "branch-prefixes", "wan-monitors", "disabled-entry"));
+    assertThat(result._configuration.getAddressLists().get("trusted-hosts").getEntries(), hasSize(2));
+    assertThat(
+        result._configuration.getAddressLists().get("trusted-hosts").getEntries().get(0).getHostIp(),
+        equalTo(Ip.parse("192.0.2.10")));
+    assertThat(
+        result._configuration.getAddressLists().get("trusted-hosts").getEntries().get(0).getComment(),
+        equalTo("single host"));
+    assertThat(
+        result._configuration.getAddressLists().get("trusted-hosts").getEntries().get(1).getHostIp(),
+        equalTo(Ip.parse("192.0.2.11")));
+    assertThat(
+        result._configuration.getAddressLists().get("trusted-hosts").getEntries().get(1).getComment(),
+        equalTo("second host"));
+    assertThat(result._configuration.getAddressLists().get("branch-prefixes").getEntries(), hasSize(2));
+    assertThat(
+        result._configuration
+            .getAddressLists()
+            .get("branch-prefixes")
+            .getEntries()
+            .get(0)
+            .getPrefix(),
+        equalTo(Prefix.parse("10.10.10.0/24")));
+    assertThat(
+        result._configuration
+            .getAddressLists()
+            .get("branch-prefixes")
+            .getEntries()
+            .get(0)
+            .getComment(),
+        equalTo("branch a"));
+    assertThat(
+        result._configuration
+            .getAddressLists()
+            .get("branch-prefixes")
+            .getEntries()
+            .get(1)
+            .getPrefix(),
+        equalTo(Prefix.parse("10.20.20.0/24")));
+    assertThat(
+        result._configuration
+            .getAddressLists()
+            .get("branch-prefixes")
+            .getEntries()
+            .get(1)
+            .getComment(),
+        equalTo("branch b"));
+    assertThat(result._configuration.getAddressLists().get("wan-monitors").getEntries(), hasSize(2));
+    assertThat(result._configuration.getAddressLists().get("disabled-entry").getEntries(), hasSize(1));
+    assertThat(
+        result._configuration
+            .getAddressLists()
+            .get("disabled-entry")
+            .getEntries()
+            .get(0)
+            .isDisabled(),
+        equalTo(true));
+    assertThat(result._warnings.getParseWarnings(), hasSize(2));
+    assertThat(
+        result._warnings.getParseWarnings().stream()
+            .map(Warnings.ParseWarning::getComment)
+            .anyMatch(comment -> comment.contains("not-an-ip")),
+        equalTo(true));
+    assertThat(
+        result._warnings.getParseWarnings().stream()
+            .map(Warnings.ParseWarning::getComment)
+            .anyMatch(comment -> comment.contains("10.0.0.0/99")),
+        equalTo(true));
+  }
+
+  @Test
+  public void testExtractorFirewallAddressListStructureTrackingFromFixture() {
+    ExtractionResult result = parseAndExtract("mikrotik_address_list_basic");
+
+    assertThat(
+        result
+            ._configuration
+            .getStructureManager()
+            .hasDefinition(FIREWALL_ADDRESS_LIST.getDescription(), "trusted-hosts"),
+        equalTo(true));
+    assertThat(
+        result
+            ._configuration
+            .getStructureManager()
+            .hasDefinition(FIREWALL_ADDRESS_LIST.getDescription(), "branch-prefixes"),
+        equalTo(true));
+    assertThat(
+        result
+            ._configuration
+            .getStructureManager()
+            .hasDefinition(FIREWALL_ADDRESS_LIST.getDescription(), "wan-monitors"),
+        equalTo(true));
+    assertThat(
+        result
+            ._configuration
+            .getStructureManager()
+            .hasDefinition(FIREWALL_ADDRESS_LIST.getDescription(), "disabled-entry"),
+        equalTo(true));
+    assertThat(
+        result
+            ._configuration
+            .getStructureManager()
+            .hasDefinition(FIREWALL_ADDRESS_LIST.getDescription(), "bad-entries"),
+        equalTo(false));
+
+    Map<String, Map<org.batfish.vendor.StructureUsage, Multiset<Integer>>> references =
+        result._configuration.getStructureManager().getStructureReferences(FIREWALL_ADDRESS_LIST);
+    assertThat(references, hasKey("missing-list"));
+    assertThat(references.get("missing-list"), hasKey(FIREWALL_FILTER_SRC_ADDRESS_LIST));
+    assertThat(references.get("trusted-hosts"), hasKey(FIREWALL_FILTER_SRC_ADDRESS_LIST));
+    assertThat(references.get("branch-prefixes"), hasKey(FIREWALL_FILTER_DST_ADDRESS_LIST));
+    assertThat(references.get("wan-monitors"), hasKey(FIREWALL_FILTER_DST_ADDRESS_LIST));
+    assertThat(references.get("branch-prefixes"), hasKey(FIREWALL_NAT_SRC_ADDRESS_LIST));
+    assertThat(references.get("trusted-hosts"), hasKey(FIREWALL_NAT_DST_ADDRESS_LIST));
+  }
+
+  @Test
+  public void testViFirewallAddressListConversionFromFixture() throws Exception {
+    ExtractionResult result = parseAndExtract("mikrotik_address_list_basic");
+    Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
+
+    assertThat(viConfig.getIpSpaces(), hasKey("trusted-hosts"));
+    assertThat(viConfig.getIpSpaces(), hasKey("branch-prefixes"));
+    assertThat(viConfig.getIpSpaces(), hasKey("wan-monitors"));
+    assertThat(viConfig.getIpSpaces(), hasKey("disabled-entry"));
+    assertThat(viConfig.getIpSpaces().get("trusted-hosts"), notNullValue());
+    assertThat(viConfig.getIpSpaces().get("branch-prefixes"), notNullValue());
+    assertThat(viConfig.getIpSpaces().get("wan-monitors"), notNullValue());
+    assertThat(viConfig.getIpSpaces().get("disabled-entry"), equalTo(EmptyIpSpace.INSTANCE));
+
+    Batfish batfish =
+        BatfishTestUtils.getBatfishFromTestrigText(
+            TestrigText.builder()
+                .setConfigurationText(
+                    ImmutableMap.of(
+                        "mtik-address-list-basic",
+                        readResource(TESTCONFIGS_PREFIX + "mikrotik_address_list_basic", UTF_8)))
+                .build(),
+            _folder);
+    batfish.computeDataPlane(batfish.getSnapshot());
+    DataPlane dp = batfish.loadDataPlane(batfish.getSnapshot());
+    String hostname =
+        getOnlyElement(batfish.loadConfigurations(batfish.getSnapshot()).values()).getHostname();
+    Set<AbstractRoute> routes =
+        dp.getRibs().get(hostname, Configuration.DEFAULT_VRF_NAME).getRoutes();
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.CONNECTED
+                        && route.getNetwork().equals(Prefix.parse("192.0.2.0/30"))),
+        equalTo(true));
   }
 
   private static ExtractionResult parseAndExtract(String fixtureName) {

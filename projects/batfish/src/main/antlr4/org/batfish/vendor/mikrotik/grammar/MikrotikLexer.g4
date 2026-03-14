@@ -134,6 +134,11 @@ LACP_RATE
   'lacp-rate'
 ;
 
+LIST
+:
+  'list'
+;
+
 SECURITY_PROFILES
 :
   'security-profiles'
@@ -229,6 +234,11 @@ SNMP
   'snmp'
 ;
 
+SRC_ADDRESS_LIST
+:
+  'src-address-list'
+;
+
 COMMUNITY
 :
   'community'
@@ -294,6 +304,11 @@ DST_ADDRESS
   'dst-address'
 ;
 
+DST_ADDRESS_LIST
+:
+  'dst-address-list'
+;
+
 GATEWAY
 :
   'gateway'
@@ -317,6 +332,11 @@ BANDWIDTH
 MTU
 :
   'mtu'
+;
+
+NAT
+:
+  'nat'
 ;
 
 LOCAL_ADDRESS

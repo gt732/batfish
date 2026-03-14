@@ -4,6 +4,11 @@ import org.batfish.vendor.StructureUsage;
 
 public enum MikrotikStructureUsage implements StructureUsage {
   INTERFACE_SELF_REFERENCE("interface self-reference"),
+  FIREWALL_ADDRESS_LIST_SELF_REFERENCE("firewall address-list self-reference"),
+  FIREWALL_FILTER_SRC_ADDRESS_LIST("firewall filter src-address-list"),
+  FIREWALL_FILTER_DST_ADDRESS_LIST("firewall filter dst-address-list"),
+  FIREWALL_NAT_SRC_ADDRESS_LIST("firewall nat src-address-list"),
+  FIREWALL_NAT_DST_ADDRESS_LIST("firewall nat dst-address-list"),
   IP_ADDRESS_INTERFACE("ip address interface"),
   BRIDGE_PORT_BRIDGE("bridge port bridge"),
   BRIDGE_PORT_INTERFACE("bridge port interface"),
