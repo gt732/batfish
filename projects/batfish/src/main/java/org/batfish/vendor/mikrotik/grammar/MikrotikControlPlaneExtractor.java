@@ -37,6 +37,7 @@ import org.batfish.vendor.mikrotik.representation.MikrotikBridgePort;
 import org.batfish.vendor.mikrotik.representation.MikrotikBridgeVlan;
 import org.batfish.vendor.mikrotik.representation.MikrotikConfiguration;
 import org.batfish.vendor.mikrotik.representation.MikrotikInterface;
+import org.batfish.vendor.mikrotik.representation.MikrotikNetwatch;
 import org.batfish.vendor.mikrotik.representation.MikrotikStaticRoute;
 
 /** Extracts a {@link MikrotikConfiguration} from a MikroTik RouterOS parse tree. */
@@ -820,6 +821,62 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
         .add(new MikrotikStaticRoute(network, nextHopIp, adminDistance));
     _configuration.referenceStructure(
         STATIC_ROUTE, network.toString(), STATIC_ROUTE_SELF_REFERENCE, ctx.getStart().getLine());
+  }
+
+  @Override
+  public void enterTool_netwatch_add(MikrotikParser.Tool_netwatch_addContext ctx) {
+    String hostStr =
+        ctx.tool_netwatch_add_prop().stream()
+            .filter(prop -> prop.tool_netwatch_prop_host() != null)
+            .map(prop -> extractParameterValue(prop.tool_netwatch_prop_host().parameter_value()))
+            .findFirst()
+            .orElse(null);
+    if (hostStr == null) {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          "Netwatch entry missing required host= field; skipping");
+      return;
+    }
+
+    String comment =
+        ctx.tool_netwatch_add_prop().stream()
+            .filter(prop -> prop.tool_netwatch_prop_comment() != null)
+            .map(prop -> extractParameterValue(prop.tool_netwatch_prop_comment().parameter_value()))
+            .findFirst()
+            .orElse(null);
+
+    String id = comment != null && !comment.isEmpty() ? comment : String.format("netwatch:%s", hostStr);
+    if (_configuration.getNetwatch().containsKey(id)) {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          String.format("Duplicate Netwatch ID '%s'; retaining first entry", id));
+      return;
+    }
+
+    MikrotikNetwatch netwatch = new MikrotikNetwatch(id, hostStr);
+    if (comment != null) {
+      netwatch.setComment(comment);
+    }
+    for (MikrotikParser.Tool_netwatch_add_propContext prop : ctx.tool_netwatch_add_prop()) {
+      if (prop.tool_netwatch_prop_disabled() != null) {
+        netwatch.setDisabled(
+            parseBoolean(extractParameterValue(prop.tool_netwatch_prop_disabled().parameter_value())));
+      } else if (prop.tool_netwatch_prop_interval() != null) {
+        netwatch.setInterval(extractParameterValue(prop.tool_netwatch_prop_interval().parameter_value()));
+      } else if (prop.tool_netwatch_prop_timeout() != null) {
+        netwatch.setTimeout(extractParameterValue(prop.tool_netwatch_prop_timeout().parameter_value()));
+      } else if (prop.tool_netwatch_prop_up_script() != null) {
+        netwatch.setUpScript(extractParameterValue(prop.tool_netwatch_prop_up_script().parameter_value()));
+      } else if (prop.tool_netwatch_prop_down_script() != null) {
+        netwatch.setDownScript(
+            extractParameterValue(prop.tool_netwatch_prop_down_script().parameter_value()));
+      }
+    }
+    _configuration.getNetwatch().put(id, netwatch);
   }
 
   @Override

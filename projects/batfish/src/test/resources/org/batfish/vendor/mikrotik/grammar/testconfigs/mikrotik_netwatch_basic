@@ -1,0 +1,14 @@
+# mar/14/2026 00:00:00 by RouterOS 6.49.17
+# software id = TEST-0001
+#
+/tool netwatch add host=192.0.2.1 interval=00:00:10 timeout=3s comment="track-core-gw" up-script=":log info \"track-core-gw up\"" down-script=":log warning \"track-core-gw down\""
+/tool netwatch add host=198.51.100.1 interval=00:00:05 timeout=1s comment="track-isp-gw" up-script=":log info \"track-isp-gw up\"" down-script=":log warning \"track-isp-gw down\""
+/tool netwatch add host=203.0.113.53 interval=00:00:30 timeout=2s comment="track-dns" up-script=":log info \"track-dns up\"" down-script=":log warning \"track-dns down\""
+/tool netwatch add host=203.0.113.54 interval=00:00:15 timeout=2s disabled=yes comment="track-disabled" up-script=":log info \"track-disabled up\"" down-script=":log warning \"track-disabled down\""
+/interface ethernet set [ find default-name=ether1 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether2 ] disable-running-check=no
+/ip address add address=192.0.2.2/30 interface=ether1 network=192.0.2.0
+/ip address add address=198.51.100.2/30 interface=ether2 network=198.51.100.0
+/ip route add distance=1 dst-address=0.0.0.0/0 gateway=192.0.2.1 comment="primary-default"
+/ip route add distance=10 dst-address=0.0.0.0/0 gateway=198.51.100.1 comment="backup-default"
+/system identity set name=mt-story61-lab

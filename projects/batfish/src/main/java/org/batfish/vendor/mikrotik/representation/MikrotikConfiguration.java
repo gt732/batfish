@@ -28,11 +28,13 @@ public class MikrotikConfiguration extends VendorConfiguration {
   private final @Nonnull Map<String, MikrotikVrf> _vrfs;
   private final @Nonnull List<MikrotikBridgePort> _bridgePorts;
   private final @Nonnull List<MikrotikBridgeVlan> _bridgeVlans;
+  private final @Nonnull Map<String, MikrotikNetwatch> _netwatch;
 
   public MikrotikConfiguration() {
     _vrfs = new LinkedHashMap<>();
     _bridgePorts = new ArrayList<>();
     _bridgeVlans = new ArrayList<>();
+    _netwatch = new LinkedHashMap<>();
     getOrCreateVrf(MAIN_VRF_NAME);
   }
 
@@ -76,6 +78,10 @@ public class MikrotikConfiguration extends VendorConfiguration {
 
   public @Nonnull List<MikrotikBridgeVlan> getBridgeVlans() {
     return _bridgeVlans;
+  }
+
+  public @Nonnull Map<String, MikrotikNetwatch> getNetwatch() {
+    return _netwatch;
   }
 
   @Override

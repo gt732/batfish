@@ -114,6 +114,22 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testLexerTokenizesNetwatchKeywords() {
+    String input =
+        "/tool netwatch add host=192.0.2.1 interval=00:00:10 timeout=3s "
+            + "up-script=\":log info \\\"up\\\"\" down-script=\":log warning \\\"down\\\"\"\n";
+    MikrotikLexer lexer = new MikrotikLexer(CharStreams.fromString(input));
+    List<Integer> tokenTypes = lexer.getAllTokens().stream().map(Token::getType).toList();
+
+    assertThat(tokenTypes, hasItem(MikrotikLexer.NETWATCH));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.HOST));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.INTERVAL));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.TIMEOUT));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.UP_SCRIPT));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.DOWN_SCRIPT));
+  }
+
+  @Test
   public void testParserParsesReferenceFixture() {
     String src = readResource(TESTCONFIGS_PREFIX + "mikrotik_interfaces_and_routes.export", UTF_8);
     Settings settings = new Settings();
@@ -178,6 +194,20 @@ public class MikrotikGrammarTest {
 
     assertThat(tree, notNullValue());
     assertThat(tree.toStringTree(parser.getParser()), containsString("if_prop_bandwidth"));
+  }
+
+  @Test
+  public void testParserParsesInlineNetwatchCommandWithoutGenericCommand() {
+    String src = "/tool netwatch add host=192.0.2.1 comment=\"track-core-gw\"\n";
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    String treeText = tree.toStringTree(parser.getParser());
+    assertThat(treeText, containsString("tool_netwatch_add"));
+    assertThat(treeText.contains("generic_command"), equalTo(false));
   }
 
   @Test
@@ -510,6 +540,65 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testExtractorNetwatchCommentBasedIdInline() {
+    String src = "/tool netwatch add host=192.0.2.1 comment=\"track-core-gw\"\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._configuration.getNetwatch(), hasKey("track-core-gw"));
+    assertThat(
+        result._configuration.getNetwatch().get("track-core-gw").getHost(), equalTo("192.0.2.1"));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testExtractorNetwatchHostFallbackIdInline() {
+    String src = "/tool netwatch add host=10.0.0.1 interval=00:00:10\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._configuration.getNetwatch(), hasKey("netwatch:10.0.0.1"));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testExtractorNetwatchDisabledInline() {
+    String src = "/tool netwatch add host=10.0.0.2 disabled=yes comment=\"track-standby\"\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._configuration.getNetwatch(), hasKey("track-standby"));
+    assertThat(
+        result._configuration.getNetwatch().get("track-standby").isDisabled(), equalTo(true));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testExtractorNetwatchDuplicateIdWarningInline() {
+    String src =
+        "/tool netwatch add host=192.0.2.1 comment=\"track-dup\"\n"
+            + "/tool netwatch add host=192.0.2.2 comment=\"track-dup\"\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._configuration.getNetwatch().keySet(), hasSize(1));
+    assertThat(result._configuration.getNetwatch(), hasKey("track-dup"));
+    assertThat(result._configuration.getNetwatch().get("track-dup").getHost(), equalTo("192.0.2.1"));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("Duplicate Netwatch ID"));
+  }
+
+  @Test
+  public void testExtractorNetwatchMissingHostWarningInline() {
+    String src = "/tool netwatch add comment=\"no-host\"\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._configuration.getNetwatch().keySet(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("missing required host"));
+  }
+
+  @Test
   public void testExtractorTunnelInvalidAddressWarningInline() {
     String src =
         "/interface gre add name=gre0 local-address=not-an-ip remote-address=5.6.7.8 mtu=1476\n";
@@ -717,6 +806,34 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testExtractorNetwatchFixture() {
+    ExtractionResult result = parseAndExtract("mikrotik_netwatch_basic");
+
+    assertThat(
+        result._configuration.getNetwatch().keySet(),
+        containsInAnyOrder("track-core-gw", "track-isp-gw", "track-dns", "track-disabled"));
+    assertThat(
+        result._configuration.getNetwatch().get("track-core-gw").getHost(), equalTo("192.0.2.1"));
+    assertThat(
+        result._configuration.getNetwatch().get("track-core-gw").getInterval(),
+        equalTo("00:00:10"));
+    assertThat(result._configuration.getNetwatch().get("track-core-gw").getTimeout(), equalTo("3s"));
+    assertThat(
+        result._configuration.getNetwatch().get("track-core-gw").isDisabled(), equalTo(false));
+    assertThat(
+        result._configuration.getNetwatch().get("track-isp-gw").getHost(),
+        equalTo("198.51.100.1"));
+    assertThat(
+        result._configuration.getNetwatch().get("track-dns").getHost(), equalTo("203.0.113.53"));
+    assertThat(
+        result._configuration.getNetwatch().get("track-disabled").isDisabled(), equalTo(true));
+    assertThat(
+        result._configuration.getNetwatch().get("track-disabled").getHost(),
+        equalTo("203.0.113.54"));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
   public void testViAndDataplaneBondingVlanFromFixture() throws Exception {
     ExtractionResult result = parseAndExtract("mikrotik_bonding_vlan_vi");
     Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
@@ -861,6 +978,49 @@ public class MikrotikGrammarTest {
     assertThat(connectedNetworks, hasItem(Prefix.parse("10.12.0.0/24")));
     assertThat(connectedNetworks, hasItem(Prefix.parse("10.0.0.0/30")));
     assertThat(connectedNetworks, hasItem(Prefix.parse("10.0.1.0/30")));
+  }
+
+  @Test
+  public void testDataplaneNetwatchFixtureSmoke() throws Exception {
+    Batfish batfish =
+        BatfishTestUtils.getBatfishFromTestrigText(
+            TestrigText.builder()
+                .setConfigurationText(
+                    ImmutableMap.of(
+                        "mtik-netwatch-basic",
+                        readResource(TESTCONFIGS_PREFIX + "mikrotik_netwatch_basic", UTF_8)))
+                .build(),
+            _folder);
+    batfish.computeDataPlane(batfish.getSnapshot());
+    DataPlane dp = batfish.loadDataPlane(batfish.getSnapshot());
+    String hostname =
+        getOnlyElement(batfish.loadConfigurations(batfish.getSnapshot()).values()).getHostname();
+    Set<AbstractRoute> routes =
+        dp.getRibs().get(hostname, Configuration.DEFAULT_VRF_NAME).getRoutes();
+
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.CONNECTED
+                        && route.getNetwork().equals(Prefix.parse("192.0.2.0/30"))),
+        equalTo(true));
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.CONNECTED
+                        && route.getNetwork().equals(Prefix.parse("198.51.100.0/30"))),
+        equalTo(true));
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.STATIC
+                        && route.getNetwork().equals(Prefix.ZERO)
+                        && route.getNextHopIp().equals(Ip.parse("192.0.2.1"))
+                        && route.getAdministrativeCost() == 1L),
+        equalTo(true));
   }
 
   @Test

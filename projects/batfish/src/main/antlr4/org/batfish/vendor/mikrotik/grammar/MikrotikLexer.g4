@@ -204,6 +204,11 @@ INSTANCE
   'instance'
 ;
 
+INTERVAL
+:
+  'interval'
+;
+
 PEER
 :
   'peer'
@@ -227,6 +232,16 @@ TOOL
 GRAPHING
 :
   'graphing'
+;
+
+HOST
+:
+  'host'
+;
+
+NETWATCH
+:
+  'netwatch'
 ;
 
 FIND
@@ -277,6 +292,11 @@ GATEWAY
 DISTANCE
 :
   'distance'
+;
+
+DOWN_SCRIPT
+:
+  'down-script'
 ;
 
 BANDWIDTH
@@ -339,9 +359,19 @@ TAGGED
   'tagged'
 ;
 
+TIMEOUT
+:
+  'timeout'
+;
+
 UNTAGGED
 :
   'untagged'
+;
+
+UP_SCRIPT
+:
+  'up-script'
 ;
 
 VLAN_IDS

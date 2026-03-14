@@ -5,7 +5,7 @@ options {
    tokenVocab = MikrotikLexer;
 }
 
-import Mikrotik_common, Mikrotik_interface, Mikrotik_static;
+import Mikrotik_common, Mikrotik_interface, Mikrotik_static, Mikrotik_tool;
 
 mikrotik_configuration
 :
@@ -111,7 +111,8 @@ snmp_command
 
 tool_command
 :
-  SLASH TOOL GRAPHING word? command_tail?
+  SLASH TOOL tool_netwatch_add
+  | SLASH TOOL GRAPHING word? command_tail?
 ;
 
 generic_command

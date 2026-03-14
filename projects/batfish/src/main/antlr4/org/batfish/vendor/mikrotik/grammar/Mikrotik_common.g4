@@ -36,11 +36,14 @@ word
   | ROUTING
   | BGP
   | INSTANCE
+  | INTERVAL
   | PEER
   | SNMP
   | COMMUNITY
   | TOOL
   | GRAPHING
+  | HOST
+  | NETWATCH
   | FIND
   | DEFAULT_NAME
   | ADD
@@ -48,10 +51,13 @@ word
   | NAME
   | DISABLED
   | COMMENT
+  | DOWN_SCRIPT
   | MTU
   | PVID
   | TAGGED
+  | TIMEOUT
   | UNTAGGED
+  | UP_SCRIPT
   | VLAN_IDS
   | DISABLE_RUNNING_CHECK
   | NETWORK
