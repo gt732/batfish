@@ -39,6 +39,7 @@ import org.batfish.vendor.mikrotik.representation.MikrotikConfiguration;
 import org.batfish.vendor.mikrotik.representation.MikrotikInterface;
 import org.batfish.vendor.mikrotik.representation.MikrotikNetwatch;
 import org.batfish.vendor.mikrotik.representation.MikrotikStaticRoute;
+import org.batfish.vendor.mikrotik.representation.MikrotikVrrpGroup;
 
 /** Extracts a {@link MikrotikConfiguration} from a MikroTik RouterOS parse tree. */
 @ParametersAreNonnullByDefault
@@ -630,6 +631,114 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
     _configuration.defineStructure(INTERFACE, name, ctx);
     _configuration.referenceStructure(
         INTERFACE, name, INTERFACE_SELF_REFERENCE, ctx.getStart().getLine());
+  }
+
+  @Override
+  public void enterInterface_vrrp_add(MikrotikParser.Interface_vrrp_addContext ctx) {
+    String name =
+        ctx.interface_vrrp_add_prop().stream()
+            .filter(prop -> prop.if_prop_name() != null)
+            .map(prop -> extractParameterValue(prop.if_prop_name().parameter_value()))
+            .findFirst()
+            .orElse(null);
+    String parentIface =
+        ctx.interface_vrrp_add_prop().stream()
+            .filter(prop -> prop.if_prop_interface() != null)
+            .map(prop -> extractParameterValue(prop.if_prop_interface().parameter_value()))
+            .findFirst()
+            .orElse(null);
+    String vridStr =
+        ctx.interface_vrrp_add_prop().stream()
+            .filter(prop -> prop.if_vrrp_prop_vrid() != null)
+            .map(prop -> extractParameterValue(prop.if_vrrp_prop_vrid().parameter_value()))
+            .findFirst()
+            .orElse(null);
+    String virtualAddressStr =
+        ctx.interface_vrrp_add_prop().stream()
+            .filter(prop -> prop.if_vrrp_prop_virtual_address() != null)
+            .map(prop -> extractParameterValue(prop.if_vrrp_prop_virtual_address().parameter_value()))
+            .findFirst()
+            .orElse(null);
+
+    if (virtualAddressStr == null) {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          "VRRP entry missing required virtual-address= field; skipping");
+      return;
+    }
+
+    Ip virtualAddress;
+    try {
+      if (virtualAddressStr.contains("/")) {
+        virtualAddress = Ip.parse(virtualAddressStr.substring(0, virtualAddressStr.indexOf('/')));
+      } else {
+        virtualAddress = Ip.parse(virtualAddressStr);
+      }
+    } catch (IllegalArgumentException e) {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          String.format(
+              "VRRP entry has unparseable virtual-address '%s'; skipping", virtualAddressStr));
+      return;
+    }
+
+    if (name == null || parentIface == null || vridStr == null) {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          "VRRP entry missing required name=, interface=, or vrid= field; skipping");
+      return;
+    }
+
+    int vrid;
+    try {
+      vrid = Integer.parseInt(vridStr);
+    } catch (NumberFormatException e) {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          String.format("VRRP entry has non-integer vrid= '%s'; skipping", vridStr));
+      return;
+    }
+
+    if (_configuration.getVrrpGroups().containsKey(name)) {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          String.format("Duplicate VRRP name '%s'; retaining first entry", name));
+      return;
+    }
+
+    MikrotikVrrpGroup group = new MikrotikVrrpGroup(name, parentIface, vrid);
+    group.setVirtualAddress(virtualAddress);
+    for (MikrotikParser.Interface_vrrp_add_propContext prop : ctx.interface_vrrp_add_prop()) {
+      if (prop.if_prop_disabled() != null) {
+        group.setDisabled(parseBoolean(extractParameterValue(prop.if_prop_disabled().parameter_value())));
+      } else if (prop.if_vrrp_prop_priority() != null) {
+        String priority = extractParameterValue(prop.if_vrrp_prop_priority().parameter_value());
+        try {
+          group.setPriority(Integer.parseInt(priority));
+        } catch (NumberFormatException e) {
+          // Keep default VRRP priority.
+        }
+      } else if (prop.if_vrrp_prop_preemption_mode() != null) {
+        group.setPreempt(
+            parseBoolean(extractParameterValue(prop.if_vrrp_prop_preemption_mode().parameter_value())));
+      } else if (prop.if_vrrp_prop_version() != null) {
+        group.setVersion(extractParameterValue(prop.if_vrrp_prop_version().parameter_value()));
+      } else if (prop.if_vrrp_prop_v3_protocol() != null) {
+        group.setV3Protocol(extractParameterValue(prop.if_vrrp_prop_v3_protocol().parameter_value()));
+      }
+    }
+
+    _configuration.getVrrpGroups().put(name, group);
   }
 
   @Override

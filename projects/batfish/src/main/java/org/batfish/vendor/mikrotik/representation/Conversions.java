@@ -10,7 +10,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 import javax.annotation.Nonnull;
+import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
+import org.batfish.common.Warnings;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.IntegerSpace;
@@ -18,9 +20,11 @@ import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.Interface.Dependency;
 import org.batfish.datamodel.Interface.DependencyType;
 import org.batfish.datamodel.InterfaceType;
+import org.batfish.datamodel.Ip;
 import org.batfish.datamodel.StaticRoute;
 import org.batfish.datamodel.SwitchportMode;
 import org.batfish.datamodel.Vrf;
+import org.batfish.datamodel.VrrpGroup;
 import org.batfish.datamodel.route.nh.NextHopIp;
 
 /** Utilities for converting Mikrotik-specific representations to VI models. */
@@ -229,6 +233,55 @@ public final class Conversions {
           viIface.setNativeVlan(nativeVlan);
         }
       }
+    }
+  }
+
+  public static void applyVrrpGroups(
+      Map<String, MikrotikVrrpGroup> vrrpGroups,
+      Map<String, Interface> viInterfaces,
+      @Nullable Warnings w) {
+    for (MikrotikVrrpGroup group : vrrpGroups.values()) {
+      if (group.isDisabled()) {
+        continue;
+      }
+      String parentName = group.getParentInterface();
+      Interface viIface = viInterfaces.get(parentName);
+      if (viIface == null) {
+        redFlag(
+            w,
+            String.format(
+                "VRRP group '%s' references nonexistent interface '%s'; skipping",
+                group.getName(), parentName));
+        continue;
+      }
+      ConcreteInterfaceAddress sourceAddress = viIface.getConcreteAddress();
+      if (sourceAddress == null) {
+        redFlag(
+            w,
+            String.format(
+                "VRRP group '%s' parent interface '%s' has no concrete address; skipping",
+                group.getName(), parentName));
+        continue;
+      }
+      Ip vip = group.getVirtualAddress();
+      if (vip == null) {
+        redFlag(w, String.format("VRRP group '%s' has no virtual address; skipping", group.getName()));
+        continue;
+      }
+      VrrpGroup viGroup =
+          VrrpGroup.builder()
+              .setPriority(group.getPriority())
+              .setPreempt(group.isPreempt())
+              .setSourceAddress(sourceAddress)
+              .setVirtualAddresses(parentName, ImmutableSet.of(vip))
+              .build();
+      viIface.addVrrpGroup(group.getVrid(), viGroup);
+    }
+  }
+
+  private static void redFlag(@Nullable Warnings w, String message) {
+    if (w != null) {
+      w.redFlag(message);
     }
   }
 

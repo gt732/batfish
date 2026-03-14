@@ -1,0 +1,14 @@
+# mar/14/2026 00:00:00 by RouterOS 6.49.17
+# software id = TEST-0002
+#
+/interface ethernet set [ find default-name=ether1 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether2 ] disable-running-check=no
+/interface vlan add interface=ether1 name=vlan10-lan vlan-id=10
+/interface vlan add interface=ether2 name=vlan20-wan vlan-id=20
+/interface vrrp add interface=vlan10-lan name=vrrp-lan vrid=10 priority=110 preemption-mode=yes version=3 v3-protocol=ipv4 virtual-address=10.10.10.254/24
+/interface vrrp add interface=vlan20-wan name=vrrp-wan vrid=20 priority=90 preemption-mode=no version=3 v3-protocol=ipv4 virtual-address=198.51.100.254/24
+/interface vrrp add disabled=yes interface=vlan10-lan name=vrrp-disabled vrid=30 priority=80 preemption-mode=yes version=3 v3-protocol=ipv4 virtual-address=10.10.10.253/24
+/ip address add address=10.10.10.1/24 interface=vlan10-lan network=10.10.10.0
+/ip address add address=198.51.100.2/24 interface=vlan20-wan network=198.51.100.0
+/ip route add distance=1 dst-address=0.0.0.0/0 gateway=198.51.100.1
+/system identity set name=mt-story62-lab

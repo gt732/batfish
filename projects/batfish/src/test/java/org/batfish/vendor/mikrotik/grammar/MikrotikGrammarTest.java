@@ -130,6 +130,17 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testLexerTokenizesVrrpKeywords() {
+    String input = "/interface vrrp add vrid=10 virtual-address=10.10.10.254/24\n";
+    MikrotikLexer lexer = new MikrotikLexer(CharStreams.fromString(input));
+    List<Integer> tokenTypes = lexer.getAllTokens().stream().map(Token::getType).toList();
+
+    assertThat(tokenTypes, hasItem(MikrotikLexer.VRRP));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.VRID));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.VIRTUAL_ADDRESS));
+  }
+
+  @Test
   public void testParserParsesReferenceFixture() {
     String src = readResource(TESTCONFIGS_PREFIX + "mikrotik_interfaces_and_routes.export", UTF_8);
     Settings settings = new Settings();
@@ -223,6 +234,20 @@ public class MikrotikGrammarTest {
 
     String treeText = tree.toStringTree(parser.getParser());
     assertThat(treeText, containsString("wireguard"));
+    assertThat(treeText.contains("generic_command"), equalTo(false));
+  }
+
+  @Test
+  public void testParserParsesInlineVrrpCommandWithoutGenericCommand() {
+    String src = "/interface vrrp add interface=ether1 name=vrrp1 vrid=10 virtual-address=1.1.1.1/24\n";
+    Settings settings = new Settings();
+    MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
+
+    ParserRuleContext tree =
+        Batfish.parse(parser, new BatfishLogger(BatfishLogger.LEVELSTR_FATAL, false), settings);
+
+    String treeText = tree.toStringTree(parser.getParser());
+    assertThat(treeText, containsString("interface_vrrp_add"));
     assertThat(treeText.contains("generic_command"), equalTo(false));
   }
 
@@ -599,6 +624,92 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testExtractorVrrpFullFieldsInline() {
+    String src =
+        "/interface vrrp add interface=ether1 name=vrrp1 vrid=10 priority=110 preemption-mode=yes"
+            + " version=3 v3-protocol=ipv4 virtual-address=10.10.10.254/24\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._configuration.getVrrpGroups(), hasKey("vrrp1"));
+    assertThat(
+        result._configuration.getVrrpGroups().get("vrrp1").getParentInterface(),
+        equalTo("ether1"));
+    assertThat(result._configuration.getVrrpGroups().get("vrrp1").getVrid(), equalTo(10));
+    assertThat(result._configuration.getVrrpGroups().get("vrrp1").getPriority(), equalTo(110));
+    assertThat(result._configuration.getVrrpGroups().get("vrrp1").isPreempt(), equalTo(true));
+    assertThat(
+        result._configuration.getVrrpGroups().get("vrrp1").getVirtualAddress(),
+        equalTo(Ip.parse("10.10.10.254")));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testExtractorVrrpDisabledInline() {
+    String src =
+        "/interface vrrp add disabled=yes interface=ether1 name=vrrp-disabled vrid=30"
+            + " virtual-address=10.10.10.253/24\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._configuration.getVrrpGroups(), hasKey("vrrp-disabled"));
+    assertThat(result._configuration.getVrrpGroups().get("vrrp-disabled").isDisabled(), equalTo(true));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testExtractorVrrpPreemptionModeNoInline() {
+    String src =
+        "/interface vrrp add interface=ether1 name=vrrp-no-preempt vrid=20 preemption-mode=no"
+            + " virtual-address=198.51.100.254/24\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._configuration.getVrrpGroups(), hasKey("vrrp-no-preempt"));
+    assertThat(
+        result._configuration.getVrrpGroups().get("vrrp-no-preempt").isPreempt(), equalTo(false));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testExtractorVrrpMissingVirtualAddressWarningInline() {
+    String src = "/interface vrrp add interface=ether1 name=vrrp-no-vip vrid=10\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._configuration.getVrrpGroups().keySet(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("missing required virtual-address"));
+  }
+
+  @Test
+  public void testExtractorVrrpDuplicateNameWarningInline() {
+    String src =
+        "/interface vrrp add interface=ether1 name=vrrp-dup vrid=10 virtual-address=10.0.0.1/24\n"
+            + "/interface vrrp add interface=ether1 name=vrrp-dup vrid=20"
+            + " virtual-address=10.0.0.2/24\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._configuration.getVrrpGroups().keySet(), hasSize(1));
+    assertThat(result._configuration.getVrrpGroups(), hasKey("vrrp-dup"));
+    assertThat(result._configuration.getVrrpGroups().get("vrrp-dup").getVrid(), equalTo(10));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("Duplicate VRRP name"));
+  }
+
+  @Test
+  public void testExtractorVrrpMissingRequiredFieldWarningInline() {
+    String src = "/interface vrrp add name=vrrp-no-iface vrid=5 virtual-address=1.2.3.4\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+
+    assertThat(result._configuration.getVrrpGroups().keySet(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("missing required name=, interface=, or vrid="));
+  }
+
+  @Test
   public void testExtractorTunnelInvalidAddressWarningInline() {
     String src =
         "/interface gre add name=gre0 local-address=not-an-ip remote-address=5.6.7.8 mtu=1476\n";
@@ -834,6 +945,32 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testExtractorVrrpFixture() {
+    ExtractionResult result = parseAndExtract("mikrotik_vrrp_basic");
+
+    assertThat(
+        result._configuration.getVrrpGroups().keySet(),
+        containsInAnyOrder("vrrp-lan", "vrrp-wan", "vrrp-disabled"));
+    assertThat(
+        result._configuration.getVrrpGroups().get("vrrp-lan").getParentInterface(),
+        equalTo("vlan10-lan"));
+    assertThat(result._configuration.getVrrpGroups().get("vrrp-lan").getVrid(), equalTo(10));
+    assertThat(result._configuration.getVrrpGroups().get("vrrp-lan").getPriority(), equalTo(110));
+    assertThat(result._configuration.getVrrpGroups().get("vrrp-lan").isPreempt(), equalTo(true));
+    assertThat(
+        result._configuration.getVrrpGroups().get("vrrp-lan").getVirtualAddress(),
+        equalTo(Ip.parse("10.10.10.254")));
+    assertThat(
+        result._configuration.getVrrpGroups().get("vrrp-wan").getParentInterface(),
+        equalTo("vlan20-wan"));
+    assertThat(result._configuration.getVrrpGroups().get("vrrp-wan").getPriority(), equalTo(90));
+    assertThat(result._configuration.getVrrpGroups().get("vrrp-wan").isPreempt(), equalTo(false));
+    assertThat(
+        result._configuration.getVrrpGroups().get("vrrp-disabled").isDisabled(), equalTo(true));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
   public void testViAndDataplaneBondingVlanFromFixture() throws Exception {
     ExtractionResult result = parseAndExtract("mikrotik_bonding_vlan_vi");
     Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
@@ -937,6 +1074,69 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testViVrrpConversionFromFixture() {
+    ExtractionResult result = parseAndExtract("mikrotik_vrrp_basic");
+    Warnings conversionWarnings = new Warnings(false, true, false);
+    result._configuration.setWarnings(conversionWarnings);
+    Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
+
+    org.batfish.datamodel.Interface vlan10 = viConfig.getAllInterfaces().get("vlan10-lan");
+    org.batfish.datamodel.Interface vlan20 = viConfig.getAllInterfaces().get("vlan20-wan");
+    assertThat(vlan10.getVrrpGroups(), hasKey(10));
+    assertThat(vlan10.getVrrpGroups().get(10).getPriority(), equalTo(110));
+    assertThat(vlan10.getVrrpGroups().get(10).getPreempt(), equalTo(true));
+    assertThat(
+        vlan10.getVrrpGroups().get(10).getSourceAddress(),
+        equalTo(ConcreteInterfaceAddress.parse("10.10.10.1/24")));
+    assertThat(vlan10.getVrrpGroups().get(10).getVirtualAddresses(), hasKey("vlan10-lan"));
+    assertThat(
+        vlan10.getVrrpGroups().get(10).getVirtualAddresses().get("vlan10-lan"),
+        contains(Ip.parse("10.10.10.254")));
+    assertThat(vlan20.getVrrpGroups(), hasKey(20));
+    assertThat(vlan20.getVrrpGroups().get(20).getPriority(), equalTo(90));
+    assertThat(vlan10.getVrrpGroups().containsKey(30), equalTo(false));
+    assertThat(conversionWarnings.getRedFlagWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testViVrrpMissingParentInterfaceWarning() {
+    String src =
+        "/interface vrrp add interface=missing-iface name=vrrp-missing vrid=10"
+            + " virtual-address=10.0.0.254/24\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+    Warnings conversionWarnings = new Warnings(false, true, false);
+    result._configuration.setWarnings(conversionWarnings);
+    Configuration unused =
+        getOnlyElement(result._configuration.toVendorIndependentConfigurations());
+    assertThat(unused, notNullValue());
+
+    assertThat(conversionWarnings.getRedFlagWarnings(), hasSize(1));
+    assertThat(
+        conversionWarnings.getRedFlagWarnings().first().getText(),
+        containsString("references nonexistent interface 'missing-iface'"));
+  }
+
+  @Test
+  public void testViVrrpMissingSourceAddressWarning() {
+    String src =
+        "/interface ethernet set [ find default-name=ether1 ] disable-running-check=no\n"
+            + "/interface vlan add interface=ether1 name=vlan10 vlan-id=10\n"
+            + "/interface vrrp add interface=vlan10 name=vrrp-no-source vrid=10"
+            + " virtual-address=10.10.10.254/24\n";
+    ExtractionResult result = parseAndExtractFromString(src);
+    Warnings conversionWarnings = new Warnings(false, true, false);
+    result._configuration.setWarnings(conversionWarnings);
+    Configuration unused =
+        getOnlyElement(result._configuration.toVendorIndependentConfigurations());
+    assertThat(unused, notNullValue());
+
+    assertThat(conversionWarnings.getRedFlagWarnings(), hasSize(1));
+    assertThat(
+        conversionWarnings.getRedFlagWarnings().first().getText(),
+        containsString("parent interface 'vlan10' has no concrete address"));
+  }
+
+  @Test
   public void testViMtuFromFixture() {
     ExtractionResult result = parseAndExtract("mikrotik_mtu_interfaces");
     Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
@@ -1019,6 +1219,49 @@ public class MikrotikGrammarTest {
                     route.getProtocol() == RoutingProtocol.STATIC
                         && route.getNetwork().equals(Prefix.ZERO)
                         && route.getNextHopIp().equals(Ip.parse("192.0.2.1"))
+                        && route.getAdministrativeCost() == 1L),
+        equalTo(true));
+  }
+
+  @Test
+  public void testDataplaneVrrpFixtureSmoke() throws Exception {
+    Batfish batfish =
+        BatfishTestUtils.getBatfishFromTestrigText(
+            TestrigText.builder()
+                .setConfigurationText(
+                    ImmutableMap.of(
+                        "mtik-vrrp-basic",
+                        readResource(TESTCONFIGS_PREFIX + "mikrotik_vrrp_basic", UTF_8)))
+                .build(),
+            _folder);
+    batfish.computeDataPlane(batfish.getSnapshot());
+    DataPlane dp = batfish.loadDataPlane(batfish.getSnapshot());
+    String hostname =
+        getOnlyElement(batfish.loadConfigurations(batfish.getSnapshot()).values()).getHostname();
+    Set<AbstractRoute> routes =
+        dp.getRibs().get(hostname, Configuration.DEFAULT_VRF_NAME).getRoutes();
+
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.CONNECTED
+                        && route.getNetwork().equals(Prefix.parse("10.10.10.0/24"))),
+        equalTo(true));
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.CONNECTED
+                        && route.getNetwork().equals(Prefix.parse("198.51.100.0/24"))),
+        equalTo(true));
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.STATIC
+                        && route.getNetwork().equals(Prefix.ZERO)
+                        && route.getNextHopIp().equals(Ip.parse("198.51.100.1"))
                         && route.getAdministrativeCost() == 1L),
         equalTo(true));
   }

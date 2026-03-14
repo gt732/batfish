@@ -10,6 +10,7 @@ word
   | BRIDGE
   | BONDING
   | PORT
+  | PRIORITY
   | ETHERNET
   | WIRELESS
   | VLAN
@@ -38,6 +39,7 @@ word
   | INSTANCE
   | INTERVAL
   | PEER
+  | PREEMPTION_MODE
   | SNMP
   | COMMUNITY
   | TOOL
@@ -58,7 +60,12 @@ word
   | TIMEOUT
   | UNTAGGED
   | UP_SCRIPT
+  | V3_PROTOCOL
+  | VERSION
+  | VIRTUAL_ADDRESS
   | VLAN_IDS
+  | VRID
+  | VRRP
   | DISABLE_RUNNING_CHECK
   | NETWORK
   | YES

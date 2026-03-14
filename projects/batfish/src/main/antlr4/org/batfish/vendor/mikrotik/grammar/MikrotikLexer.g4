@@ -64,6 +64,11 @@ PORT
   'port'
 ;
 
+PRIORITY
+:
+  'priority'
+;
+
 ETHERNET
 :
   'ethernet'
@@ -102,6 +107,11 @@ WIREGUARD
 PEERS
 :
   'peers'
+;
+
+PREEMPTION_MODE
+:
+  'preemption-mode'
 ;
 
 VLAN_ID
@@ -374,9 +384,34 @@ UP_SCRIPT
   'up-script'
 ;
 
+V3_PROTOCOL
+:
+  'v3-protocol'
+;
+
+VERSION
+:
+  'version'
+;
+
+VIRTUAL_ADDRESS
+:
+  'virtual-address'
+;
+
 VLAN_IDS
 :
   'vlan-ids'
+;
+
+VRID
+:
+  'vrid'
+;
+
+VRRP
+:
+  'vrrp'
 ;
 
 IP_PREFIX

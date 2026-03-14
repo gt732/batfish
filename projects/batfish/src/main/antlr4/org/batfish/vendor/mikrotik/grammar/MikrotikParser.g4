@@ -45,6 +45,7 @@ interface_type_command
   | interface_ipip_add
   | interface_eoip_add
   | interface_wireguard_add
+  | interface_vrrp_add
   | WIREGUARD PEERS command_tail?
   | WIRELESS SECURITY_PROFILES command_tail?
   | command_tail?

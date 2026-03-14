@@ -184,6 +184,58 @@ interface_wireguard_add_prop
   | key_value_parameter
 ;
 
+interface_vrrp_add
+:
+  VRRP ADD interface_vrrp_add_prop*
+;
+
+interface_vrrp_add_prop
+:
+  if_prop_name
+  | if_prop_interface
+  | if_vrrp_prop_vrid
+  | if_vrrp_prop_priority
+  | if_vrrp_prop_preemption_mode
+  | if_vrrp_prop_version
+  | if_vrrp_prop_v3_protocol
+  | if_vrrp_prop_virtual_address
+  | if_prop_disabled
+  | if_prop_comment
+  | if_prop_mtu
+  | if_prop_bandwidth
+  | key_value_parameter
+;
+
+if_vrrp_prop_vrid
+:
+  VRID EQUALS parameter_value
+;
+
+if_vrrp_prop_priority
+:
+  PRIORITY EQUALS parameter_value
+;
+
+if_vrrp_prop_preemption_mode
+:
+  PREEMPTION_MODE EQUALS parameter_value
+;
+
+if_vrrp_prop_version
+:
+  VERSION EQUALS parameter_value
+;
+
+if_vrrp_prop_v3_protocol
+:
+  V3_PROTOCOL EQUALS parameter_value
+;
+
+if_vrrp_prop_virtual_address
+:
+  VIRTUAL_ADDRESS EQUALS parameter_value
+;
+
 if_bonding_prop_slaves
 :
   SLAVES EQUALS parameter_value
