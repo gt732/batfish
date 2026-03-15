@@ -45,9 +45,24 @@ ip_firewall_filter_add
 
 ip_firewall_filter_add_prop
 :
-  ip_fw_filter_prop_src_address_list
+  ip_fw_filter_prop_chain
+  | ip_fw_filter_prop_action
+  | ip_fw_filter_prop_src_address_list
   | ip_fw_filter_prop_dst_address_list
+  | ip_fw_filter_prop_protocol
+  | ip_fw_filter_prop_dst_port
+  | ip_fw_filter_prop_src_port
   | key_value_parameter
+;
+
+ip_fw_filter_prop_chain
+:
+  CHAIN EQUALS parameter_value
+;
+
+ip_fw_filter_prop_action
+:
+  ACTION EQUALS parameter_value
 ;
 
 ip_fw_filter_prop_src_address_list
@@ -58,6 +73,21 @@ ip_fw_filter_prop_src_address_list
 ip_fw_filter_prop_dst_address_list
 :
   DST_ADDRESS_LIST EQUALS parameter_value
+;
+
+ip_fw_filter_prop_protocol
+:
+  PROTOCOL EQUALS parameter_value
+;
+
+ip_fw_filter_prop_dst_port
+:
+  DST_PORT EQUALS parameter_value
+;
+
+ip_fw_filter_prop_src_port
+:
+  SRC_PORT EQUALS parameter_value
 ;
 
 ip_firewall_nat_add

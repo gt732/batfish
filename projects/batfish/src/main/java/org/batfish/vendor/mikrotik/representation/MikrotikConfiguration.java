@@ -29,6 +29,7 @@ public class MikrotikConfiguration extends VendorConfiguration {
   private final @Nonnull List<MikrotikBridgePort> _bridgePorts;
   private final @Nonnull List<MikrotikBridgeVlan> _bridgeVlans;
   private final @Nonnull Map<String, MikrotikAddressList> _addressLists;
+  private final @Nonnull Map<String, MikrotikFirewallFilter> _firewallFilters;
   private final @Nonnull Map<String, MikrotikNetwatch> _netwatch;
   private final @Nonnull Map<String, MikrotikVrrpGroup> _vrrpGroups;
 
@@ -37,6 +38,7 @@ public class MikrotikConfiguration extends VendorConfiguration {
     _bridgePorts = new ArrayList<>();
     _bridgeVlans = new ArrayList<>();
     _addressLists = new LinkedHashMap<>();
+    _firewallFilters = new LinkedHashMap<>();
     _netwatch = new LinkedHashMap<>();
     _vrrpGroups = new LinkedHashMap<>();
     getOrCreateVrf(MAIN_VRF_NAME);
@@ -92,6 +94,10 @@ public class MikrotikConfiguration extends VendorConfiguration {
     return _addressLists;
   }
 
+  public @Nonnull Map<String, MikrotikFirewallFilter> getFirewallFilters() {
+    return _firewallFilters;
+  }
+
   public @Nonnull Map<String, MikrotikVrrpGroup> getVrrpGroups() {
     return _vrrpGroups;
   }
@@ -112,6 +118,7 @@ public class MikrotikConfiguration extends VendorConfiguration {
     c.setVrfs(ImmutableMap.copyOf(viVrfs));
     Conversions.materializeVrfInterfacesAndStaticRoutes(c, _vrfs.values());
     Conversions.convertAddressLists(_addressLists, c, getWarnings());
+    Conversions.convertFirewallFilters(_firewallFilters, c, getWarnings());
     Conversions.applyVrrpGroups(_vrrpGroups, c.getAllInterfaces(), getWarnings());
 
     Set<String> bridgeNames = Conversions.collectBridgeNames(_vrfs.values());

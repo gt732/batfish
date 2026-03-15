@@ -1,6 +1,7 @@
 package org.batfish.vendor.mikrotik.grammar;
 
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.FIREWALL_ADDRESS_LIST;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.FIREWALL_FILTER;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.STATIC_ROUTE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BONDING_SLAVE_INTERFACE;
@@ -10,6 +11,7 @@ import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_TAGGED_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BRIDGE_VLAN_UNTAGGED_INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_FILTER_DST_ADDRESS_LIST;
+import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_FILTER_SELF_REFERENCE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_FILTER_SRC_ADDRESS_LIST;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_NAT_DST_ADDRESS_LIST;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.FIREWALL_NAT_SRC_ADDRESS_LIST;
@@ -32,6 +34,8 @@ import org.batfish.common.Warnings;
 import org.batfish.common.Warnings.ParseWarning;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.IpProtocol;
+import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.Prefix;
 import org.batfish.grammar.BatfishParseTreeWalker;
 import org.batfish.grammar.ControlPlaneExtractor;
@@ -43,6 +47,8 @@ import org.batfish.vendor.mikrotik.representation.MikrotikAddressListEntry;
 import org.batfish.vendor.mikrotik.representation.MikrotikBridgePort;
 import org.batfish.vendor.mikrotik.representation.MikrotikBridgeVlan;
 import org.batfish.vendor.mikrotik.representation.MikrotikConfiguration;
+import org.batfish.vendor.mikrotik.representation.MikrotikFirewallFilter;
+import org.batfish.vendor.mikrotik.representation.MikrotikFirewallFilterRule;
 import org.batfish.vendor.mikrotik.representation.MikrotikInterface;
 import org.batfish.vendor.mikrotik.representation.MikrotikNetwatch;
 import org.batfish.vendor.mikrotik.representation.MikrotikStaticRoute;
@@ -993,6 +999,151 @@ public class MikrotikControlPlaneExtractor extends MikrotikParserBaseListener
             prop.ip_fw_filter_prop_dst_address_list().getStart().getLine());
       }
     }
+
+    String chain =
+        ctx.ip_firewall_filter_add_prop().stream()
+            .filter(prop -> prop.ip_fw_filter_prop_chain() != null)
+            .map(prop -> extractParameterValue(prop.ip_fw_filter_prop_chain().parameter_value()))
+            .findFirst()
+            .orElse(null);
+    String rawAction =
+        ctx.ip_firewall_filter_add_prop().stream()
+            .filter(prop -> prop.ip_fw_filter_prop_action() != null)
+            .map(prop -> extractParameterValue(prop.ip_fw_filter_prop_action().parameter_value()))
+            .findFirst()
+            .orElse(null);
+
+    if (chain == null) {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          "firewall filter rule missing required chain= field; skipping");
+      return;
+    }
+    if (rawAction == null) {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          String.format(
+              "firewall filter rule for chain '%s' missing required action= field; skipping", chain));
+      return;
+    }
+
+    LineAction action;
+    if (rawAction.equals("accept")) {
+      action = LineAction.PERMIT;
+    } else if (rawAction.equals("drop")) {
+      action = LineAction.DENY;
+    } else {
+      _w.addWarning(
+          ctx,
+          getFullText(ctx),
+          _parser,
+          String.format("unrecognized firewall filter action '%s'; skipping rule", rawAction));
+      return;
+    }
+
+    String srcAddressList =
+        ctx.ip_firewall_filter_add_prop().stream()
+            .filter(prop -> prop.ip_fw_filter_prop_src_address_list() != null)
+            .map(
+                prop ->
+                    extractParameterValue(prop.ip_fw_filter_prop_src_address_list().parameter_value()))
+            .findFirst()
+            .orElse(null);
+    String dstAddressList =
+        ctx.ip_firewall_filter_add_prop().stream()
+            .filter(prop -> prop.ip_fw_filter_prop_dst_address_list() != null)
+            .map(
+                prop ->
+                    extractParameterValue(prop.ip_fw_filter_prop_dst_address_list().parameter_value()))
+            .findFirst()
+            .orElse(null);
+
+    String rawProtocol =
+        ctx.ip_firewall_filter_add_prop().stream()
+            .filter(prop -> prop.ip_fw_filter_prop_protocol() != null)
+            .map(prop -> extractParameterValue(prop.ip_fw_filter_prop_protocol().parameter_value()))
+            .findFirst()
+            .orElse(null);
+    IpProtocol protocol = null;
+    if (rawProtocol != null) {
+      if (rawProtocol.equals("tcp")) {
+        protocol = IpProtocol.TCP;
+      } else if (rawProtocol.equals("udp")) {
+        protocol = IpProtocol.UDP;
+      } else if (rawProtocol.equals("icmp")) {
+        protocol = IpProtocol.ICMP;
+      } else {
+        _w.addWarning(
+            ctx,
+            getFullText(ctx),
+            _parser,
+            String.format("unrecognized protocol '%s'; skipping rule", rawProtocol));
+        return;
+      }
+    }
+
+    String rawDstPort =
+        ctx.ip_firewall_filter_add_prop().stream()
+            .filter(prop -> prop.ip_fw_filter_prop_dst_port() != null)
+            .map(prop -> extractParameterValue(prop.ip_fw_filter_prop_dst_port().parameter_value()))
+            .findFirst()
+            .orElse(null);
+    Integer dstPort = null;
+    if (rawDstPort != null) {
+      try {
+        int port = Integer.parseInt(rawDstPort);
+        if (port < 0 || port > 65535) {
+          throw new NumberFormatException("out of range");
+        }
+        dstPort = port;
+      } catch (NumberFormatException e) {
+        _w.addWarning(
+            ctx,
+            getFullText(ctx),
+            _parser,
+            String.format("invalid dst-port '%s'; skipping rule", rawDstPort));
+        return;
+      }
+    }
+
+    String rawSrcPort =
+        ctx.ip_firewall_filter_add_prop().stream()
+            .filter(prop -> prop.ip_fw_filter_prop_src_port() != null)
+            .map(prop -> extractParameterValue(prop.ip_fw_filter_prop_src_port().parameter_value()))
+            .findFirst()
+            .orElse(null);
+    Integer srcPort = null;
+    if (rawSrcPort != null) {
+      try {
+        int port = Integer.parseInt(rawSrcPort);
+        if (port < 0 || port > 65535) {
+          throw new NumberFormatException("out of range");
+        }
+        srcPort = port;
+      } catch (NumberFormatException e) {
+        _w.addWarning(
+            ctx,
+            getFullText(ctx),
+            _parser,
+            String.format("invalid src-port '%s'; skipping rule", rawSrcPort));
+        return;
+      }
+    }
+
+    MikrotikFirewallFilter filter =
+        _configuration.getFirewallFilters().computeIfAbsent(chain, MikrotikFirewallFilter::new);
+    if (filter.getRules().isEmpty()) {
+      _configuration.defineStructure(FIREWALL_FILTER, chain, ctx);
+      _configuration.referenceStructure(
+          FIREWALL_FILTER, chain, FIREWALL_FILTER_SELF_REFERENCE, ctx.getStart().getLine());
+    }
+    filter.addRule(
+        new MikrotikFirewallFilterRule(
+            chain, action, srcAddressList, dstAddressList, protocol, dstPort, srcPort));
   }
 
   @Override

@@ -1,0 +1,28 @@
+# mar/14/2026 00:00:00 by RouterOS 6.49.17
+# software id = TEST-0004
+#
+/interface bridge add name=bridge-lan
+/interface ethernet set [ find default-name=ether1 ] disable-running-check=no
+/interface ethernet set [ find default-name=ether2 ] disable-running-check=no
+/interface vlan add interface=bridge-lan name=vlan10-lan vlan-id=10
+/ip address add address=192.0.2.2/30 interface=ether1 network=192.0.2.0
+/ip address add address=10.10.10.1/24 interface=vlan10-lan network=10.10.10.0
+/ip firewall address-list add address=10.10.10.10 comment="admin host" list=trusted-admins
+/ip firewall address-list add address=10.10.10.11 comment="backup admin" list=trusted-admins
+/ip firewall address-list add address=10.20.20.0/24 comment="branch a" list=branch-prefixes
+/ip firewall address-list add address=203.0.113.53 comment="monitor target" list=wan-monitors
+/ip firewall filter add action=accept chain=input comment="allow trusted admins to router" src-address-list=trusted-admins
+/ip firewall filter add action=drop chain=input comment="drop branch to router" src-address-list=branch-prefixes
+/ip firewall filter add action=accept chain=input comment="allow icmp to router" protocol=icmp
+/ip firewall filter add action=drop chain=input comment="default drop input"
+/ip firewall filter add action=accept chain=forward comment="allow branch to monitor target" dst-address-list=wan-monitors src-address-list=branch-prefixes
+/ip firewall filter add action=drop chain=forward comment="block telnet transit" dst-port=23 protocol=tcp
+/ip firewall filter add action=accept chain=forward comment="allow https transit" dst-port=443 protocol=tcp
+/ip firewall filter add action=drop chain=forward comment="default drop forward"
+/ip firewall filter add action=accept chain=output comment="allow router monitor traffic" dst-address-list=wan-monitors
+/ip firewall filter add action=drop chain=output comment="default drop output"
+/ip firewall filter add chain=input action=accept src-address-list=missing-list comment="dangling list ref"
+/ip firewall filter add chain=forward action=accept protocol=tcp dst-port=bad comment="invalid port"
+/ip firewall filter add chain=output action=weird comment="invalid action"
+/ip route add distance=1 gateway=192.0.2.1
+/system identity set name=mt-story72-lab

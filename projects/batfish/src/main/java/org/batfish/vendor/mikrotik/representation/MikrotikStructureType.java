@@ -5,6 +5,7 @@ import org.batfish.vendor.StructureType;
 public enum MikrotikStructureType implements StructureType {
   INTERFACE("interface"),
   FIREWALL_ADDRESS_LIST("firewall address-list"),
+  FIREWALL_FILTER("firewall filter"),
   IP_ADDRESS("ip address"),
   STATIC_ROUTE("static route");
 

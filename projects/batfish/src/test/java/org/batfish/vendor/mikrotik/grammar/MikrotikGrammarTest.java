@@ -3,6 +3,12 @@ package org.batfish.vendor.mikrotik.grammar;
 import static com.google.common.collect.Iterables.getOnlyElement;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.batfish.common.util.Resources.readResource;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.and;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchDst;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchDstPort;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchIpProtocol;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrc;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrcPort;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.FIREWALL_ADDRESS_LIST;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureType.INTERFACE;
 import static org.batfish.vendor.mikrotik.representation.MikrotikStructureUsage.BONDING_SLAVE_INTERFACE;
@@ -43,9 +49,15 @@ import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.DataPlane;
 import org.batfish.datamodel.EmptyIpSpace;
+import org.batfish.datamodel.ExprAclLine;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.IpAccessList;
+import org.batfish.datamodel.IpProtocol;
+import org.batfish.datamodel.IpSpaceReference;
+import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.Prefix;
 import org.batfish.datamodel.RoutingProtocol;
+import org.batfish.datamodel.acl.TrueExpr;
 import org.batfish.grammar.silent_syntax.SilentSyntaxCollection;
 import org.batfish.identifiers.NetworkId;
 import org.batfish.identifiers.SnapshotId;
@@ -55,6 +67,8 @@ import org.batfish.main.TestrigText;
 import org.batfish.vendor.mikrotik.representation.MikrotikBridgePort;
 import org.batfish.vendor.mikrotik.representation.MikrotikBridgeVlan;
 import org.batfish.vendor.mikrotik.representation.MikrotikConfiguration;
+import org.batfish.vendor.mikrotik.representation.MikrotikFirewallFilter;
+import org.batfish.vendor.mikrotik.representation.MikrotikFirewallFilterRule;
 import org.batfish.vendor.mikrotik.representation.MikrotikInterface;
 import org.batfish.vendor.mikrotik.representation.MikrotikStaticRoute;
 import org.junit.Rule;
@@ -1475,6 +1489,19 @@ public class MikrotikGrammarTest {
   }
 
   @Test
+  public void testLexerTokenizesFirewallFilterRuleKeywords() {
+    String input = "action=accept chain=input protocol=tcp dst-port=443 src-port=1024\n";
+    MikrotikLexer lexer = new MikrotikLexer(CharStreams.fromString(input));
+    List<Integer> tokenTypes = lexer.getAllTokens().stream().map(Token::getType).toList();
+
+    assertThat(tokenTypes, hasItem(MikrotikLexer.ACTION));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.CHAIN));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.PROTOCOL));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.DST_PORT));
+    assertThat(tokenTypes, hasItem(MikrotikLexer.SRC_PORT));
+  }
+
+  @Test
   public void testParserParsesInlineFirewallAddressListWithoutGenericCommand() {
     String src = "/ip firewall address-list add list=trusted-hosts address=10.0.0.1\n";
     Settings settings = new Settings();
@@ -1489,7 +1516,9 @@ public class MikrotikGrammarTest {
 
   @Test
   public void testParserParsesInlineFirewallFilterWithoutGenericCommand() {
-    String src = "/ip firewall filter add chain=input action=accept src-address-list=mylist\n";
+    String src =
+        "/ip firewall filter add chain=input action=accept src-address-list=mylist"
+            + " protocol=tcp dst-port=443 src-port=1024\n";
     Settings settings = new Settings();
     MikrotikCombinedParser parser = new MikrotikCombinedParser(src, settings);
     ParserRuleContext tree =
@@ -1497,6 +1526,11 @@ public class MikrotikGrammarTest {
 
     String treeText = tree.toStringTree(parser.getParser());
     assertThat(treeText, containsString("ip_firewall_filter_add"));
+    assertThat(treeText, containsString("ip_fw_filter_prop_chain"));
+    assertThat(treeText, containsString("ip_fw_filter_prop_action"));
+    assertThat(treeText, containsString("ip_fw_filter_prop_protocol"));
+    assertThat(treeText, containsString("ip_fw_filter_prop_dst_port"));
+    assertThat(treeText, containsString("ip_fw_filter_prop_src_port"));
     assertThat(treeText.contains("generic_command"), equalTo(false));
   }
 
@@ -1616,6 +1650,220 @@ public class MikrotikGrammarTest {
         result._configuration.getStructureManager().getStructureReferences(FIREWALL_ADDRESS_LIST);
     assertThat(references, hasKey("mylist"));
     assertThat(references.get("mylist"), hasKey(FIREWALL_FILTER_DST_ADDRESS_LIST));
+  }
+
+  @Test
+  public void testExtractorFirewallFilterAcceptRule() {
+    ExtractionResult result = parseAndExtractFromString("/ip firewall filter add chain=input action=accept\n");
+
+    Map<String, MikrotikFirewallFilter> filters = result._configuration.getFirewallFilters();
+    assertThat(filters, hasKey("input"));
+    assertThat(filters.get("input").getRules(), hasSize(1));
+    MikrotikFirewallFilterRule rule = filters.get("input").getRules().get(0);
+    assertThat(rule.getChain(), equalTo("input"));
+    assertThat(rule.getAction(), equalTo(LineAction.PERMIT));
+    assertThat(rule.getSrcAddressList(), equalTo(null));
+    assertThat(rule.getDstAddressList(), equalTo(null));
+    assertThat(rule.getProtocol(), equalTo(null));
+    assertThat(rule.getDstPort(), equalTo(null));
+    assertThat(rule.getSrcPort(), equalTo(null));
+    assertThat(result._warnings.getParseWarnings(), hasSize(0));
+  }
+
+  @Test
+  public void testExtractorFirewallFilterDropRuleWithSrcAddressList() {
+    ExtractionResult result =
+        parseAndExtractFromString(
+            "/ip firewall filter add chain=input action=drop src-address-list=bad-guys\n");
+
+    Map<String, MikrotikFirewallFilter> filters = result._configuration.getFirewallFilters();
+    assertThat(filters, hasKey("input"));
+    MikrotikFirewallFilterRule rule = filters.get("input").getRules().get(0);
+    assertThat(rule.getAction(), equalTo(LineAction.DENY));
+    assertThat(rule.getSrcAddressList(), equalTo("bad-guys"));
+  }
+
+  @Test
+  public void testExtractorFirewallFilterProtocolAndPorts() {
+    ExtractionResult result =
+        parseAndExtractFromString(
+            "/ip firewall filter add chain=forward action=accept protocol=tcp"
+                + " dst-port=443 src-port=1024\n");
+
+    Map<String, MikrotikFirewallFilter> filters = result._configuration.getFirewallFilters();
+    assertThat(filters, hasKey("forward"));
+    MikrotikFirewallFilterRule rule = filters.get("forward").getRules().get(0);
+    assertThat(rule.getProtocol(), equalTo(IpProtocol.TCP));
+    assertThat(rule.getDstPort(), equalTo(443));
+    assertThat(rule.getSrcPort(), equalTo(1024));
+  }
+
+  @Test
+  public void testExtractorFirewallFilterUnknownActionWarning() {
+    ExtractionResult result =
+        parseAndExtractFromString("/ip firewall filter add chain=input action=weird\n");
+
+    assertThat(result._configuration.getFirewallFilters().entrySet(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("unrecognized firewall filter action"));
+  }
+
+  @Test
+  public void testExtractorFirewallFilterUnknownProtocolWarning() {
+    ExtractionResult result =
+        parseAndExtractFromString("/ip firewall filter add chain=input action=accept protocol=gre\n");
+
+    assertThat(result._configuration.getFirewallFilters().entrySet(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("unrecognized protocol"));
+  }
+
+  @Test
+  public void testExtractorFirewallFilterInvalidDstPortWarning() {
+    ExtractionResult result =
+        parseAndExtractFromString(
+            "/ip firewall filter add chain=input action=accept protocol=tcp dst-port=bad\n");
+
+    assertThat(result._configuration.getFirewallFilters().entrySet(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(), containsString("invalid dst-port"));
+  }
+
+  @Test
+  public void testExtractorFirewallFilterMissingChainWarning() {
+    ExtractionResult result = parseAndExtractFromString("/ip firewall filter add action=accept\n");
+
+    assertThat(result._configuration.getFirewallFilters().entrySet(), hasSize(0));
+    assertThat(result._warnings.getParseWarnings(), hasSize(1));
+    assertThat(
+        result._warnings.getParseWarnings().get(0).getComment(),
+        containsString("missing required chain="));
+  }
+
+  @Test
+  public void testExtractorFirewallFilterFixture() {
+    ExtractionResult result = parseAndExtract("mikrotik_firewall_filter_basic");
+
+    Map<String, MikrotikFirewallFilter> filters = result._configuration.getFirewallFilters();
+    assertThat(filters.keySet(), containsInAnyOrder("input", "forward", "output"));
+    assertThat(filters.get("input").getRules(), hasSize(5));
+    assertThat(filters.get("forward").getRules(), hasSize(4));
+    assertThat(filters.get("output").getRules(), hasSize(2));
+    assertThat(filters.get("input").getRules().get(0).getAction(), equalTo(LineAction.PERMIT));
+    assertThat(filters.get("input").getRules().get(0).getSrcAddressList(), equalTo("trusted-admins"));
+    assertThat(filters.get("input").getRules().get(1).getAction(), equalTo(LineAction.DENY));
+    assertThat(filters.get("input").getRules().get(2).getProtocol(), equalTo(IpProtocol.ICMP));
+    assertThat(
+        filters.get("forward").getRules().get(0).getSrcAddressList(), equalTo("branch-prefixes"));
+    assertThat(filters.get("forward").getRules().get(0).getDstAddressList(), equalTo("wan-monitors"));
+    assertThat(filters.get("forward").getRules().get(1).getDstPort(), equalTo(23));
+    assertThat(filters.get("forward").getRules().get(2).getDstPort(), equalTo(443));
+    assertThat(result._warnings.getParseWarnings(), hasSize(2));
+    assertThat(
+        result._warnings.getParseWarnings().stream()
+            .map(Warnings.ParseWarning::getComment)
+            .anyMatch(comment -> comment.contains("invalid dst-port")),
+        equalTo(true));
+    assertThat(
+        result._warnings.getParseWarnings().stream()
+            .map(Warnings.ParseWarning::getComment)
+            .anyMatch(comment -> comment.contains("unrecognized firewall filter action")),
+        equalTo(true));
+  }
+
+  @Test
+  public void testViFirewallFilterConversionFromFixture() throws Exception {
+    ExtractionResult result = parseAndExtract("mikrotik_firewall_filter_basic");
+    Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
+
+    assertThat(viConfig.getIpAccessLists(), hasKey("~input~"));
+    assertThat(viConfig.getIpAccessLists(), hasKey("~forward~"));
+    assertThat(viConfig.getIpAccessLists(), hasKey("~output~"));
+
+    IpAccessList input = viConfig.getIpAccessLists().get("~input~");
+    IpAccessList forward = viConfig.getIpAccessLists().get("~forward~");
+    IpAccessList output = viConfig.getIpAccessLists().get("~output~");
+    assertThat(input.getLines(), hasSize(5));
+    assertThat(forward.getLines(), hasSize(4));
+    assertThat(output.getLines(), hasSize(2));
+
+    ExprAclLine inputLine0 = (ExprAclLine) input.getLines().get(0);
+    ExprAclLine inputLine1 = (ExprAclLine) input.getLines().get(1);
+    ExprAclLine inputLine3 = (ExprAclLine) input.getLines().get(3);
+    ExprAclLine inputLine4 = (ExprAclLine) input.getLines().get(4);
+    assertThat(inputLine0.getAction(), equalTo(LineAction.PERMIT));
+    assertThat(inputLine1.getAction(), equalTo(LineAction.DENY));
+    assertThat(inputLine3.getAction(), equalTo(LineAction.DENY));
+    assertThat(inputLine0.getMatchCondition(), equalTo(matchSrc(new IpSpaceReference("trusted-admins"))));
+    assertThat(inputLine3.getMatchCondition(), equalTo(TrueExpr.INSTANCE));
+    assertThat(inputLine4.getMatchCondition(), equalTo(matchSrc(new IpSpaceReference("missing-list"))));
+
+    ExprAclLine forwardLine0 = (ExprAclLine) forward.getLines().get(0);
+    ExprAclLine forwardLine1 = (ExprAclLine) forward.getLines().get(1);
+    ExprAclLine forwardLine2 = (ExprAclLine) forward.getLines().get(2);
+    assertThat(
+        forwardLine0.getMatchCondition(),
+        equalTo(
+            and(
+                matchSrc(new IpSpaceReference("branch-prefixes")),
+                matchDst(new IpSpaceReference("wan-monitors")))));
+    assertThat(
+        forwardLine1.getMatchCondition(),
+        equalTo(and(matchIpProtocol(IpProtocol.TCP), matchDstPort(23))));
+    assertThat(
+        forwardLine2.getMatchCondition(),
+        equalTo(and(matchIpProtocol(IpProtocol.TCP), matchDstPort(443))));
+
+    ExprAclLine outputLine0 = (ExprAclLine) output.getLines().get(0);
+    assertThat(outputLine0.getMatchCondition(), equalTo(matchDst(new IpSpaceReference("wan-monitors"))));
+
+    Batfish batfish =
+        BatfishTestUtils.getBatfishFromTestrigText(
+            TestrigText.builder()
+                .setConfigurationText(
+                    ImmutableMap.of(
+                        "mtik-firewall-filter-basic",
+                        readResource(TESTCONFIGS_PREFIX + "mikrotik_firewall_filter_basic", UTF_8)))
+                .build(),
+            _folder);
+    batfish.computeDataPlane(batfish.getSnapshot());
+    DataPlane dp = batfish.loadDataPlane(batfish.getSnapshot());
+    String hostname =
+        getOnlyElement(batfish.loadConfigurations(batfish.getSnapshot()).values()).getHostname();
+    Set<AbstractRoute> routes =
+        dp.getRibs().get(hostname, Configuration.DEFAULT_VRF_NAME).getRoutes();
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.CONNECTED
+                        && route.getNetwork().equals(Prefix.parse("192.0.2.0/30"))),
+        equalTo(true));
+    assertThat(
+        routes.stream()
+            .anyMatch(
+                route ->
+                    route.getProtocol() == RoutingProtocol.CONNECTED
+                        && route.getNetwork().equals(Prefix.parse("10.10.10.0/24"))),
+        equalTo(true));
+  }
+
+  @Test
+  public void testViFirewallFilterConversionSrcPortMatch() {
+    ExtractionResult result =
+        parseAndExtractFromString(
+            "/ip firewall filter add chain=input action=accept protocol=tcp src-port=1024\n");
+    Configuration viConfig = getOnlyElement(result._configuration.toVendorIndependentConfigurations());
+
+    ExprAclLine line = (ExprAclLine) viConfig.getIpAccessLists().get("~input~").getLines().get(0);
+    assertThat(
+        line.getMatchCondition(),
+        equalTo(and(matchIpProtocol(IpProtocol.TCP), matchSrcPort(1024))));
   }
 
   @Test

@@ -64,6 +64,11 @@ PORT
   'port'
 ;
 
+PROTOCOL
+:
+  'protocol'
+;
+
 PRIORITY
 :
   'priority'
@@ -154,6 +159,16 @@ ADDRESS
   'address'
 ;
 
+ACTION
+:
+  'action'
+;
+
+ADDRESS_LIST
+:
+  'address-list'
+;
+
 ROUTE
 :
   'route'
@@ -174,19 +189,9 @@ FILTER
   'filter'
 ;
 
-ADDRESS_LIST
-:
-  'address-list'
-;
-
 DHCP_CLIENT
 :
   'dhcp-client'
-;
-
-SYSTEM
-:
-  'system'
 ;
 
 IDENTITY
@@ -214,6 +219,11 @@ BGP
   'bgp'
 ;
 
+CHAIN
+:
+  'chain'
+;
+
 INSTANCE
 :
   'instance'
@@ -237,6 +247,16 @@ SNMP
 SRC_ADDRESS_LIST
 :
   'src-address-list'
+;
+
+SRC_PORT
+:
+  'src-port'
+;
+
+SYSTEM
+:
+  'system'
 ;
 
 COMMUNITY
@@ -307,6 +327,11 @@ DST_ADDRESS
 DST_ADDRESS_LIST
 :
   'dst-address-list'
+;
+
+DST_PORT
+:
+  'dst-port'
 ;
 
 GATEWAY

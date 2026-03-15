@@ -1,7 +1,15 @@
 package org.batfish.vendor.mikrotik.representation;
 
+import static org.batfish.datamodel.acl.AclLineMatchExprs.and;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchDst;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchDstPort;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchIpProtocol;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrc;
+import static org.batfish.datamodel.acl.AclLineMatchExprs.matchSrcPort;
+
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -15,20 +23,27 @@ import javax.annotation.Nullable;
 import javax.annotation.ParametersAreNonnullByDefault;
 import org.batfish.common.Warnings;
 import org.batfish.datamodel.AclIpSpace;
+import org.batfish.datamodel.AclLine;
 import org.batfish.datamodel.ConcreteInterfaceAddress;
 import org.batfish.datamodel.Configuration;
 import org.batfish.datamodel.EmptyIpSpace;
+import org.batfish.datamodel.ExprAclLine;
 import org.batfish.datamodel.IntegerSpace;
 import org.batfish.datamodel.Interface;
 import org.batfish.datamodel.Interface.Dependency;
 import org.batfish.datamodel.Interface.DependencyType;
 import org.batfish.datamodel.InterfaceType;
 import org.batfish.datamodel.Ip;
+import org.batfish.datamodel.IpAccessList;
 import org.batfish.datamodel.IpSpace;
+import org.batfish.datamodel.IpSpaceReference;
+import org.batfish.datamodel.LineAction;
 import org.batfish.datamodel.StaticRoute;
 import org.batfish.datamodel.SwitchportMode;
 import org.batfish.datamodel.Vrf;
 import org.batfish.datamodel.VrrpGroup;
+import org.batfish.datamodel.acl.AclLineMatchExpr;
+import org.batfish.datamodel.acl.TrueExpr;
 import org.batfish.datamodel.route.nh.NextHopIp;
 
 /** Utilities for converting Mikrotik-specific representations to VI models. */
@@ -180,6 +195,44 @@ public final class Conversions {
               ? enabledSpaces.get(0)
               : AclIpSpace.union(enabledSpaces.toArray(new IpSpace[0]));
       c.getIpSpaces().put(list.getName(), combined);
+    }
+  }
+
+  static void convertFirewallFilters(
+      Map<String, MikrotikFirewallFilter> firewallFilters, Configuration c, @Nullable Warnings w) {
+    for (MikrotikFirewallFilter filter : firewallFilters.values()) {
+      String aclName = "~" + filter.getChain() + "~";
+      List<AclLine> lines = new ArrayList<>();
+      for (MikrotikFirewallFilterRule rule : filter.getRules()) {
+        List<AclLineMatchExpr> conjuncts = new ArrayList<>();
+        if (rule.getSrcAddressList() != null) {
+          conjuncts.add(matchSrc(new IpSpaceReference(rule.getSrcAddressList())));
+        }
+        if (rule.getDstAddressList() != null) {
+          conjuncts.add(matchDst(new IpSpaceReference(rule.getDstAddressList())));
+        }
+        if (rule.getProtocol() != null) {
+          conjuncts.add(matchIpProtocol(rule.getProtocol()));
+        }
+        if (rule.getDstPort() != null) {
+          conjuncts.add(matchDstPort(rule.getDstPort()));
+        }
+        if (rule.getSrcPort() != null) {
+          conjuncts.add(matchSrcPort(rule.getSrcPort()));
+        }
+        AclLineMatchExpr matchExpr =
+            conjuncts.isEmpty()
+                ? TrueExpr.INSTANCE
+                : (conjuncts.size() == 1 ? conjuncts.get(0) : and(conjuncts));
+        String lineName = rule.getChain() + ":" + rule.getAction().name().toLowerCase(Locale.ROOT);
+        if (rule.getAction() == LineAction.PERMIT) {
+          lines.add(ExprAclLine.accepting(lineName, matchExpr));
+        } else {
+          lines.add(ExprAclLine.rejecting(lineName, matchExpr));
+        }
+      }
+      c.getIpAccessLists()
+          .put(aclName, IpAccessList.builder().setName(aclName).setLines(lines).build());
     }
   }
 
